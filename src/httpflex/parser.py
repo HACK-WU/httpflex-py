@@ -13,7 +13,7 @@ from typing import Any
 
 import requests
 
-from hackwu_http_client.constants import (
+from httpflex.constants import (
     DEFAULT_CHUNK_SIZE,
     DEFAULT_DOWNLOAD_PATH,
     DEFAULT_FILENAME,

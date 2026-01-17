@@ -1,4 +1,4 @@
-# hackwu-httpclient
+# httpflex
 
 一个功能强大、高度可扩展的 HTTP 客户端框架，提供统一的 API 请求接口和完善的可插拔组件体系。
 
@@ -39,7 +39,7 @@
 ### 最简示例
 
 ```python
-from hackwu_http_client import BaseClient, JSONResponseParser
+from httpflex import BaseClient, JSONResponseParser
 
 class GitHubClient(BaseClient):
     base_url = "https://api.github.com"
@@ -62,7 +62,7 @@ result = GitHubClient.request({"username": "octocat"})
 继承 `BaseClient` 并配置类属性：
 
 ```python
-from hackwu_http_client import BaseClient, JSONResponseParser
+from httpflex import BaseClient, JSONResponseParser
 
 class MyAPIClient(BaseClient):
     # 必填：API 基础 URL
@@ -172,8 +172,8 @@ for result in results:
 #### 2. 分布式批量请求（使用 Celery）
 
 ```python
-from hackwu_http_client import BaseClient
-from hackwu_http_client.async_executor import CeleryAsyncExecutor
+from httpflex import BaseClient
+from httpflex.async_executor import CeleryAsyncExecutor
 
 class PostsClient(BaseClient):
     base_url = "https://api.example.com"
@@ -197,7 +197,7 @@ results = client.request([
 #### 方式1: 使用 DRF Serializer
 
 ```python
-from hackwu_http_client import DRFClient
+from httpflex import DRFClient
 from rest_framework import serializers
 
 class UserCreateClient(DRFClient):
@@ -231,9 +231,9 @@ except Exception as e:
 #### 方式2: 自定义验证器
 
 ```python
-from hackwu_http_client import BaseClient
-from hackwu_http_client.serializer import BaseRequestSerializer
-from hackwu_http_client.exceptions import APIClientRequestValidationError
+from httpflex import BaseClient
+from httpflex.serializer import BaseRequestSerializer
+from httpflex.exceptions import APIClientRequestValidationError
 
 class UserRequestSerializer(BaseRequestSerializer):
     def validate(self, data):
@@ -263,8 +263,8 @@ class UserClient(BaseClient):
 #### 状态码验证
 
 ```python
-from hackwu_http_client import BaseClient
-from hackwu_http_client.validator import StatusCodeValidator
+from httpflex import BaseClient
+from httpflex.validator import StatusCodeValidator
 
 class StrictAPIClient(BaseClient):
     base_url = "https://api.example.com"
@@ -283,8 +283,8 @@ client = StrictAPIClient()
 #### 自定义响应验证
 
 ```python
-from hackwu_http_client.validator import BaseResponseValidator
-from hackwu_http_client.exceptions import APIClientResponseValidationError
+from httpflex.validator import BaseResponseValidator
+from httpflex.exceptions import APIClientResponseValidationError
 
 class BusinessValidator(BaseResponseValidator):
     def validate(self, client_instance, response, parsed_data):
@@ -307,7 +307,7 @@ class MyClient(BaseClient):
 #### 1. 内存缓存（LRU）
 
 ```python
-from hackwu_http_client.cache import CacheClient, InMemoryCacheBackend
+from httpflex.cache import CacheClient, InMemoryCacheBackend
 
 class CachedPostsClient(CacheClient):
     base_url = "https://api.example.com"
@@ -333,7 +333,7 @@ client.clear_cache()
 #### 2. Redis 分布式缓存
 
 ```python
-from hackwu_http_client.cache import CacheClient, RedisCacheBackend
+from httpflex.cache import CacheClient, RedisCacheBackend
 
 class DistributedCachedClient(CacheClient):
     base_url = "https://api.example.com"
@@ -357,7 +357,7 @@ result = client.request({"user_id": 1})
 #### 3. 用户级缓存隔离
 
 ```python
-from hackwu_http_client.cache import CacheClient, InMemoryCacheBackend
+from httpflex.cache import CacheClient, InMemoryCacheBackend
 
 class UserCachedClient(CacheClient):
     base_url = "https://api.example.com"
@@ -375,7 +375,7 @@ user2_client.request({"action": "profile"})  # 缓存在 user_456 命名空间
 #### 4. 自定义缓存键
 
 ```python
-from hackwu_http_client.cache import CacheClient
+from httpflex.cache import CacheClient
 
 class CustomCacheClient(CacheClient):
     base_url = "https://api.example.com"
@@ -393,7 +393,7 @@ class CustomCacheClient(CacheClient):
 #### 5. 批量请求缓存
 
 ```python
-from hackwu_http_client.cache import CacheClient, InMemoryCacheBackend
+from httpflex.cache import CacheClient, InMemoryCacheBackend
 
 class BatchCachedClient(CacheClient):
     base_url = "https://api.example.com"
@@ -422,8 +422,8 @@ results2 = client.request([
 #### 1. 线程池执行器（默认）
 
 ```python
-from hackwu_http_client import BaseClient
-from hackwu_http_client.async_executor import ThreadPoolAsyncExecutor
+from httpflex import BaseClient
+from httpflex.async_executor import ThreadPoolAsyncExecutor
 
 class ConcurrentClient(BaseClient):
     base_url = "https://api.example.com"
@@ -443,7 +443,7 @@ results = client.request([
 #### 2. Celery 分布式执行器
 
 ```python
-from hackwu_http_client.async_executor import CeleryAsyncExecutor
+from httpflex.async_executor import CeleryAsyncExecutor
 from celery import Celery
 
 # 配置 Celery
@@ -481,7 +481,7 @@ results = client2.request([
 #### 注册全局钩子
 
 ```python
-from hackwu_http_client import BaseClient
+from httpflex import BaseClient
 import time
 
 class MyClient(BaseClient):
@@ -552,7 +552,7 @@ class CustomClient(BaseClient):
 解析 JSON 响应：
 
 ```python
-from hackwu_http_client import BaseClient, JSONResponseParser
+from httpflex import BaseClient, JSONResponseParser
 
 class APIClient(BaseClient):
     base_url = "https://api.example.com"
@@ -568,7 +568,7 @@ result = client.request()
 获取响应文本内容：
 
 ```python
-from hackwu_http_client import ContentResponseParser
+from httpflex import ContentResponseParser
 
 class HTMLClient(BaseClient):
     base_url = "https://example.com"
@@ -584,7 +584,7 @@ result = client.request()
 获取原始响应对象：
 
 ```python
-from hackwu_http_client import RawResponseParser
+from httpflex import RawResponseParser
 
 class RawClient(BaseClient):
     base_url = "https://api.example.com"
@@ -603,7 +603,7 @@ print(response.headers)
 下载文件：
 
 ```python
-from hackwu_http_client import FileWriteResponseParser
+from httpflex import FileWriteResponseParser
 
 class FileDownloadClient(BaseClient):
     base_url = "https://example.com"
@@ -627,7 +627,7 @@ if result["result"]:
 流式下载大文件：
 
 ```python
-from hackwu_http_client import StreamResponseParser
+from httpflex import StreamResponseParser
 
 class StreamClient(BaseClient):
     base_url = "https://example.com"
@@ -644,7 +644,7 @@ for chunk in result["data"]:
 #### 6. 自定义解析器
 
 ```python
-from hackwu_http_client.parser import BaseResponseParser
+from httpflex.parser import BaseResponseParser
 import xml.etree.ElementTree as ET
 
 class XMLResponseParser(BaseResponseParser):
@@ -680,7 +680,7 @@ class XMLClient(BaseClient):
 #### 自定义格式化器
 
 ```python
-from hackwu_http_client.formatter import BaseResponseFormatter
+from httpflex.formatter import BaseResponseFormatter
 
 class CustomFormatter(BaseResponseFormatter):
     def format(self, formated_response, parsed_data, request_id, 
@@ -769,7 +769,7 @@ result = MyAPIClient.request({"action": "test"})
 ### 2. 错误处理
 
 ```python
-from hackwu_http_client.exceptions import (
+from httpflex.exceptions import (
     APIClientError,
     APIClientHTTPError,
     APIClientTimeoutError,
@@ -844,8 +844,8 @@ class ProductionClient(BaseClient):
 ### 4. 批量请求优化
 
 ```python
-from hackwu_http_client.cache import CacheClient, RedisCacheBackend
-from hackwu_http_client.async_executor import ThreadPoolAsyncExecutor
+from httpflex.cache import CacheClient, RedisCacheBackend
+from httpflex.async_executor import ThreadPoolAsyncExecutor
 
 # 使用缓存 + 异步执行
 class OptimizedClient(CacheClient):

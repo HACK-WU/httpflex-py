@@ -16,8 +16,8 @@ from celery import Celery, current_app, shared_task
 from celery.exceptions import TimeoutError as CeleryTimeoutError
 from celery.result import AsyncResult, ResultSet
 
-from hackwu_http_client.constants import RESPONSE_CODE_NON_HTTP_ERROR
-from hackwu_http_client.exceptions import APIClientError
+from httpflex.constants import RESPONSE_CODE_NON_HTTP_ERROR
+from httpflex.exceptions import APIClientError
 
 logger = logging.getLogger(__name__)
 

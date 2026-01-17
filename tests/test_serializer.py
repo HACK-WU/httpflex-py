@@ -9,8 +9,8 @@
 """
 
 import pytest
-from hackwu_http_client.serializer import BaseRequestSerializer
-from hackwu_http_client.exceptions import APIClientValidationError
+from httpflex.serializer import BaseRequestSerializer
+from httpflex.exceptions import APIClientValidationError
 
 
 class TestBaseRequestSerializer:

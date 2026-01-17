@@ -51,7 +51,7 @@ def mock_session(mocker):
 @pytest.fixture
 def base_client_class():
     """返回 BaseClient 类（用于需要导入的测试）"""
-    from hackwu_http_client import BaseClient
+    from httpflex import BaseClient
 
     return BaseClient
 
@@ -59,7 +59,7 @@ def base_client_class():
 @pytest.fixture
 def base_client(requests_mock):
     """基础配置的 BaseClient 实例"""
-    from hackwu_http_client import BaseClient
+    from httpflex import BaseClient
 
     # Mock 默认 URL
     requests_mock.get("https://api.example.com/test", json={"result": True})
@@ -91,7 +91,7 @@ def mock_celery_app():
 @pytest.fixture
 def mock_celery_executor(mock_celery_app):
     """Mock CeleryAsyncExecutor"""
-    from hackwu_http_client.async_executor import CeleryAsyncExecutor
+    from httpflex.async_executor import CeleryAsyncExecutor
 
     executor = CeleryAsyncExecutor(celery_app=mock_celery_app)
     return executor
@@ -100,8 +100,8 @@ def mock_celery_executor(mock_celery_app):
 @pytest.fixture
 def client_with_validator(requests_mock):
     """含状态码验证器的客户端"""
-    from hackwu_http_client import BaseClient
-    from hackwu_http_client.validator import StatusCodeValidator
+    from httpflex import BaseClient
+    from httpflex.validator import StatusCodeValidator
 
     requests_mock.get("https://api.example.com/test", json={"result": True})
 

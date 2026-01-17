@@ -11,7 +11,7 @@ BaseClient 实际 HTTP 请求测试
 import pytest
 import responses
 from unittest.mock import patch
-from hackwu_http_client.client import BaseClient
+from httpflex.client import BaseClient
 
 
 class SimpleAPIClient(BaseClient):

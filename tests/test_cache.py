@@ -10,7 +10,7 @@ cache.py 模块的单元测试
 import pytest
 import time
 from abc import ABC
-from hackwu_http_client.cache import (
+from httpflex.cache import (
     BaseCacheBackend,
     InMemoryCacheBackend,
     RedisCacheBackend,

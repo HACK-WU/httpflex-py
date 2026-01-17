@@ -12,7 +12,7 @@ BaseClient 缓存功能测试
 import pytest
 import responses
 import time
-from hackwu_http_client.cache import CacheClient, InMemoryCacheBackend
+from httpflex.cache import CacheClient, InMemoryCacheBackend
 
 
 class SimpleCacheAPIClient(CacheClient):

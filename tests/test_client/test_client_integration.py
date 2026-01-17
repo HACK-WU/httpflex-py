@@ -11,10 +11,10 @@ BaseClient 集成测试
 import pytest
 import responses
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from hackwu_http_client.client import BaseClient
-from hackwu_http_client.cache import CacheClient, InMemoryCacheBackend
-from hackwu_http_client.serializer import BaseRequestSerializer
-from hackwu_http_client.exceptions import APIClientValidationError
+from httpflex.client import BaseClient
+from httpflex.cache import CacheClient, InMemoryCacheBackend
+from httpflex.serializer import BaseRequestSerializer
+from httpflex.exceptions import APIClientValidationError
 
 
 class SimpleIntegrationClient(CacheClient):

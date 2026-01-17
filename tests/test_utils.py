@@ -9,7 +9,7 @@
 """
 
 import pytest
-from hackwu_http_client.utils import sanitize_headers, sanitize_url, sanitize_dict, mask_string
+from httpflex.utils import sanitize_headers, sanitize_url, sanitize_dict, mask_string
 
 
 class TestSanitizeHeaders:

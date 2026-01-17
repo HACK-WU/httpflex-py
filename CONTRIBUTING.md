@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢您对 hackwu-httpclient 项目的关注！我们欢迎任何形式的贡献。
+感谢您对 httpflex 项目的关注！我们欢迎任何形式的贡献。
 
 ## 如何贡献
 
@@ -82,7 +82,7 @@
 
 ```
 hackwu-httpclient/
-├── src/hackwu_http_client/     # 源代码目录
+├── src/httpflex/     # 源代码目录
 │   ├── __init__.py             # 包初始化文件
 │   ├── client.py               # 核心客户端
 │   ├── async_executor.py       # 异步执行器
@@ -150,7 +150,7 @@ pytest tests/test_client.py
 pytest tests/test_client.py::TestBaseClient::test_request
 
 # 生成覆盖率报告
-pytest --cov=hackwu_http_client --cov-report=html
+pytest --cov=httpflex --cov-report=html
 ```
 
 ### 文档要求
@@ -181,7 +181,7 @@ Pull Request 提交后，维护者会进行代码审查，可能会要求：
 
 发布流程：
 
-1. 更新版本号（在 `pyproject.toml` 和 `src/hackwu_http_client/__init__.py` 中）
+1. 更新版本号（在 `pyproject.toml` 和 `src/httpflex/__init__.py` 中）
 2. 更新 CHANGELOG.md
 3. 创建 Git tag
 4. 发布到 PyPI

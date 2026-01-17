@@ -13,8 +13,8 @@ import responses
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from hackwu_http_client.client import BaseClient
-from hackwu_http_client.cache import CacheClient, InMemoryCacheBackend
+from httpflex.client import BaseClient
+from httpflex.cache import CacheClient, InMemoryCacheBackend
 
 
 class SimpleThreadingClient(BaseClient):

@@ -14,8 +14,8 @@ validator.py 模块的单元测试
 import pytest
 from abc import ABC
 from unittest.mock import Mock
-from hackwu_http_client.validator import BaseResponseValidator, StatusCodeValidator
-from hackwu_http_client.exceptions import APIClientResponseValidationError
+from httpflex.validator import BaseResponseValidator, StatusCodeValidator
+from httpflex.exceptions import APIClientResponseValidationError
 
 
 class TestBaseResponseValidator:

@@ -10,9 +10,9 @@ BaseClient 序列化器测试
 
 import pytest
 import responses
-from hackwu_http_client.client import BaseClient
-from hackwu_http_client.serializer import BaseRequestSerializer
-from hackwu_http_client.exceptions import APIClientValidationError
+from httpflex.client import BaseClient
+from httpflex.serializer import BaseRequestSerializer
+from httpflex.exceptions import APIClientValidationError
 
 
 class SimpleSerializerClient(BaseClient):
@@ -344,7 +344,7 @@ class TestRequestSerializerWithCache:
     def test_serializer_with_cache_client(self):
         """测试序列化器与缓存客户端配合使用"""
         # Arrange
-        from hackwu_http_client.cache import CacheClient, InMemoryCacheBackend
+        from httpflex.cache import CacheClient, InMemoryCacheBackend
 
         responses.add(responses.GET, "https://api.example.com/users", json={"users": []}, status=200)
 

@@ -1,5 +1,5 @@
 """
-hackwu-httpclient HTTP 客户端模块
+httpflex HTTP 客户端模块
 
 提供功能强大、易于扩展的 HTTP 客户端框架
 
@@ -12,7 +12,7 @@ hackwu-httpclient HTTP 客户端模块
     - 缓存: CacheClientMixin, InMemoryCacheBackend, RedisCacheBackend
 
 使用示例:
-    >>> from hackwu_http_client import BaseClient, JSONResponseParser
+    >>> from httpflex import BaseClient, JSONResponseParser
     >>>
     >>> class MyAPIClient(BaseClient):
     ...     base_url = "https://api.example.com"
@@ -23,10 +23,10 @@ hackwu-httpclient HTTP 客户端模块
 """
 
 # 核心客户端
-from hackwu_http_client.client import BaseClient, DRFClient
+from httpflex.client import BaseClient, DRFClient
 
 # 异常类
-from hackwu_http_client.exceptions import (
+from httpflex.exceptions import (
     APIClientError,
     APIClientHTTPError,
     APIClientNetworkError,
@@ -36,7 +36,7 @@ from hackwu_http_client.exceptions import (
 )
 
 # 响应解析器
-from hackwu_http_client.parser import (
+from httpflex.parser import (
     BaseResponseParser,
     ContentResponseParser,
     FileWriteResponseParser,
@@ -46,32 +46,32 @@ from hackwu_http_client.parser import (
 )
 
 # 响应格式化器
-from hackwu_http_client.formatter import (
+from httpflex.formatter import (
     BaseResponseFormatter,
     DefaultResponseFormatter,
 )
 
 # 异步执行器
-from hackwu_http_client.async_executor import (
+from httpflex.async_executor import (
     BaseAsyncExecutor,
     ThreadPoolAsyncExecutor,
 )
 
 # 响应验证器
-from hackwu_http_client.validator import (
+from httpflex.validator import (
     BaseResponseValidator,
     StatusCodeValidator,
 )
 
 # 缓存支持
-from hackwu_http_client.cache import (
+from httpflex.cache import (
     BaseCacheBackend,
     InMemoryCacheBackend,
     RedisCacheBackend,
 )
 
 # 工具函数
-from hackwu_http_client.utils import (
+from httpflex.utils import (
     mask_string,
     sanitize_dict,
     sanitize_headers,
@@ -79,7 +79,7 @@ from hackwu_http_client.utils import (
 )
 
 # 常量配置
-from hackwu_http_client.constants import (
+from httpflex.constants import (
     CACHEABLE_METHODS,
     DEFAULT_CACHE_EXPIRE,
     DEFAULT_MAX_WORKERS,

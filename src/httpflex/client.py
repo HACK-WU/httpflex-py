@@ -31,7 +31,7 @@ from rest_framework import serializers
 RequestData: TypeAlias = dict[str, Any]
 ResponseDict: TypeAlias = dict[str, Any]
 
-from hackwu_http_client.constants import (
+from httpflex.constants import (
     DEFAULT_MAX_WORKERS,
     DEFAULT_POOL_CONFIG,
     DEFAULT_RETRIES,
@@ -41,7 +41,7 @@ from hackwu_http_client.constants import (
     RESPONSE_CODE_NON_HTTP_ERROR,
     RESPONSE_CODE_UNEXPECTED_TYPE,
 )
-from hackwu_http_client.exceptions import (
+from httpflex.exceptions import (
     APIClientError,
     APIClientHTTPError,
     APIClientNetworkError,
@@ -49,16 +49,16 @@ from hackwu_http_client.exceptions import (
     APIClientTimeoutError,
     APIClientValidationError,
 )
-from hackwu_http_client.async_executor import BaseAsyncExecutor, ThreadPoolAsyncExecutor
-from hackwu_http_client.formatter import BaseResponseFormatter, DefaultResponseFormatter
-from hackwu_http_client.parser import (
+from httpflex.async_executor import BaseAsyncExecutor, ThreadPoolAsyncExecutor
+from httpflex.formatter import BaseResponseFormatter, DefaultResponseFormatter
+from httpflex.parser import (
     BaseResponseParser,
     FileWriteResponseParser,
     JSONResponseParser,
     RawResponseParser,
 )
-from hackwu_http_client.serializer import BaseRequestSerializer
-from hackwu_http_client.validator import BaseResponseValidator
+from httpflex.serializer import BaseRequestSerializer
+from httpflex.validator import BaseResponseValidator
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -751,7 +751,7 @@ class BaseClient:
         # 记录请求开始日志
         # INFO 级别：记录请求的基本信息（方法和 URL），生产环境可见
         if self.enable_sanitization:
-            from hackwu_http_client.utils import sanitize_url
+            from httpflex.utils import sanitize_url
 
             safe_url = sanitize_url(url, self.sensitive_params)
         else:
@@ -761,7 +761,7 @@ class BaseClient:
         # DEBUG 级别：记录完整的请求参数（包含 headers、params 等），仅调试时可见
         if logger.isEnabledFor(logging.DEBUG):
             if self.enable_sanitization:
-                from hackwu_http_client.utils import sanitize_dict, sanitize_headers
+                from httpflex.utils import sanitize_dict, sanitize_headers
 
                 safe_kwargs = sanitize_dict(request_config.copy(), self.sensitive_params)
                 if self.session.headers:

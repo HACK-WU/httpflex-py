@@ -19,7 +19,7 @@ import base64
 
 import redis
 
-from hackwu_http_client.constants import (
+from httpflex.constants import (
     CACHEABLE_METHODS,
     DEFAULT_CACHE_EXPIRE,
     DEFAULT_CACHE_MAXSIZE,
@@ -28,7 +28,7 @@ from hackwu_http_client.constants import (
     REDIS_DEFAULT_PORT,
     REDIS_MAX_CONNECTIONS,
 )
-from hackwu_http_client.client import BaseClient
+from httpflex.client import BaseClient
 
 logger = logging.getLogger(__name__)
 

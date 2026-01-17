@@ -10,7 +10,7 @@ client.py 模块的基础单元测试
 import pytest
 from unittest.mock import Mock
 import requests
-from hackwu_http_client.client import BaseClient
+from httpflex.client import BaseClient
 
 
 # 创建测试用的客户端子类
@@ -397,7 +397,7 @@ class TestBaseClientDefaultFormatResponse:
     def test_format_http_error_response(self):
         """测试格式化HTTP错误响应"""
         # Arrange
-        from hackwu_http_client.exceptions import APIClientHTTPError
+        from httpflex.exceptions import APIClientHTTPError
 
         client = MyTestClient()
         error = APIClientHTTPError("HTTP 404: Not Found")
@@ -416,7 +416,7 @@ class TestBaseClientDefaultFormatResponse:
     def test_format_network_error_response(self):
         """测试格式化网络错误响应"""
         # Arrange
-        from hackwu_http_client.exceptions import APIClientNetworkError
+        from httpflex.exceptions import APIClientNetworkError
 
         client = MyTestClient()
         error = APIClientNetworkError("Connection failed")
@@ -485,7 +485,7 @@ class TestBaseClientValidation:
     def test_initialization_without_base_url_raises_error(self):
         """测试没有base_url时初始化失败"""
         # Arrange
-        from hackwu_http_client.exceptions import APIClientValidationError
+        from httpflex.exceptions import APIClientValidationError
 
         class ClientWithoutURL(BaseClient):
             pass

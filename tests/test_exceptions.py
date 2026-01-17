@@ -6,7 +6,7 @@
 
 import pytest
 from unittest.mock import Mock
-from hackwu_http_client.exceptions import (
+from httpflex.exceptions import (
     APIClientError,
     APIClientHTTPError,
     APIClientNetworkError,

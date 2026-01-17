@@ -5,7 +5,7 @@
 """
 
 import pytest
-from hackwu_http_client import constants
+from httpflex import constants
 
 
 class TestHTTPMethodConstants:

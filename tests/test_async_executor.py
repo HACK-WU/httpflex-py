@@ -13,14 +13,14 @@ import responses
 from unittest.mock import MagicMock, patch
 from celery.result import AsyncResult
 
-from hackwu_http_client.async_executor import (
+from httpflex.async_executor import (
     BaseAsyncExecutor,
     ThreadPoolAsyncExecutor,
     CeleryAsyncExecutor,
     execute_request_task,
 )
-from hackwu_http_client.client import BaseClient
-from hackwu_http_client.constants import RESPONSE_CODE_NON_HTTP_ERROR
+from httpflex.client import BaseClient
+from httpflex.constants import RESPONSE_CODE_NON_HTTP_ERROR
 
 
 class SimpleTestClient(BaseClient):
@@ -292,7 +292,7 @@ class TestCeleryAsyncExecutor:
         validated_requests = {"req_1": {"user_id": 1}}
 
         # Act
-        with patch("hackwu_http_client.async_executor.ResultSet") as mock_result_set:
+        with patch("httpflex.async_executor.ResultSet") as mock_result_set:
             from celery.exceptions import TimeoutError as CeleryTimeoutError
 
             mock_result_set.return_value.get.side_effect = CeleryTimeoutError()

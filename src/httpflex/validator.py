@@ -11,7 +11,7 @@ from typing import Any
 
 import requests
 
-from hackwu_http_client.exceptions import APIClientResponseValidationError
+from httpflex.exceptions import APIClientResponseValidationError
 
 logger = logging.getLogger(__name__)
 

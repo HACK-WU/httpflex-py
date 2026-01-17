@@ -28,8 +28,8 @@ if not settings.configured:
 
 from rest_framework import serializers
 
-from hackwu_http_client.client import DRFClient
-from hackwu_http_client.exceptions import APIClientRequestValidationError
+from httpflex.client import DRFClient
+from httpflex.exceptions import APIClientRequestValidationError
 
 
 class SimpleDRFClient(DRFClient):

@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 requires = [ "setuptools>=61", "wheel" ]
 
 [project]
-name = "hackwu-httpclient"
+name = "httpflex"
 version = "1.0.0"
 description = "一个功能强大、易于使用的 HTTP 客户端库，支持同步、异步、缓存、请求重试等功能"
 readme = "README.md"
-keywords = [ "async", "cache", "client", "http", "requests", "retry" ]
+keywords = [ "client", "http", "requests" ]
 license = { text = "MIT" }
 authors = [
   { name = "HACK-WU" },
@@ -27,10 +27,32 @@ classifiers = [
 ]
 
 dependencies = [
+  "celery>=5.6.2",
+  "redis>=7.1",
   "requests>=2.32.4",
 ]
 
-optional-dependencies.dev = [
+optional-dependencies.celery = [
+  "celery>=5.6.2",
+]
+
+optional-dependencies.drf = [
+  "djangorestframework>=3.16.1",
+]
+
+optional-dependencies.redis = [
+  "redis>=7.1",
+]
+
+urls.Documentation = "https://github.com/HACK-WU/httpflex#readme"
+urls.Homepage = "https://github.com/HACK-WU/httpflex"
+urls.Issues = "https://github.com/HACK-WU/httpflex/issues"
+urls.Repository = "https://github.com/HACK-WU/httpflex"
+
+[dependency-groups]
+dev = [
+  "djangorestframework>=3.16.1",
+  "fakeredis>=2.33",
   "pre-commit>=4.2",
   "pytest>=8.4.1",
   "pytest-cov>=7",
@@ -40,13 +62,6 @@ optional-dependencies.dev = [
   "responses>=0.25.8",
   "ruff>=0.12",
 ]
-optional-dependencies.drf = [
-  "djangorestframework>=3.16.1",
-]
-urls.Documentation = "https://github.com/HACK-WU/hackwu-httpclient#readme"
-urls.Homepage = "https://github.com/HACK-WU/hackwu-httpclient"
-urls.Issues = "https://github.com/HACK-WU/hackwu-httpclient/issues"
-urls.Repository = "https://github.com/HACK-WU/hackwu-httpclient"
 
 [tool.setuptools.packages.find]
 where = [ "src" ]
@@ -112,12 +127,11 @@ python_functions = [ "test_*" ]
 markers = [
   "unit: 单元测试",
   "slow: 慢速测试（>1s）",
-  "network: 需要网络 Mock",
 ]
 addopts = [
   "-v",
   "--tb=short",
-  "--cov=hackwu_http_client",
+  "--cov=httpflex",
   "--cov-report=term-missing",
   "--cov-fail-under=90",
   "-p",
@@ -127,7 +141,7 @@ addopts = [
 # 覆盖率配置
 
 [tool.coverage.run]
-source = [ "hackwu_http_client" ]
+source = [ "httpflex" ]
 omit = [
   "*/tests/*",
   "*/__pycache__/*",

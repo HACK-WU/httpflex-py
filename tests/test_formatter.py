@@ -10,7 +10,7 @@ formatter.py 模块的单元测试
 
 import pytest
 from abc import ABC
-from hackwu_http_client.formatter import BaseResponseFormatter, DefaultResponseFormatter
+from httpflex.formatter import BaseResponseFormatter, DefaultResponseFormatter
 
 
 class TestBaseResponseFormatter:

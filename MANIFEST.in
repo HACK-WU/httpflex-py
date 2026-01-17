@@ -2,7 +2,7 @@ include README.md
 include LICENSE
 include CHANGELOG.md
 include CONTRIBUTING.md
-recursive-include src/hackwu_http_client *.py
+recursive-include src/httpflex *.py
 recursive-include tests *.py
 recursive-include tests/fixtures *
 global-exclude __pycache__

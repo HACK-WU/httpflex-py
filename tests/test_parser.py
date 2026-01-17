@@ -10,7 +10,7 @@ import tempfile
 import pytest
 from abc import ABC
 from unittest.mock import Mock
-from hackwu_http_client.parser import (
+from httpflex.parser import (
     BaseResponseParser,
     JSONResponseParser,
     ContentResponseParser,
