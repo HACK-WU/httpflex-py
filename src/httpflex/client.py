@@ -960,12 +960,13 @@ class BaseClient:
 
     def generate_request_id(self, suffix=None) -> str:
         """生成全局唯一的请求 ID"""
-        if suffix is not None:
-            suffix = str(suffix)
-
         timestamp = int(time.time() * 1000)  # 毫秒级时间戳
         short_uuid = uuid.uuid4().hex[:8]
-        return f"REQ-{timestamp}-{short_uuid}-{suffix}"
+        request_id=f"REQ-{timestamp}-{short_uuid}"
+
+        if suffix is not None:
+            return f"{request_id}-{suffix}"
+        return request_id
 
     def default_format_response(
         self,

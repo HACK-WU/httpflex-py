@@ -255,6 +255,14 @@ class TestBaseClientRequestID:
         # Assert
         assert request_id.startswith("REQ-")
         parts = request_id.split("-")
+        assert len(parts) == 3
+
+        # Act
+        request_id = client.generate_request_id("test")
+
+        # Assert
+        assert request_id.startswith("REQ-")
+        parts = request_id.split("-")
         assert len(parts) == 4
 
     @pytest.mark.unit
