@@ -5,8 +5,8 @@ requires = [ "setuptools>=61", "wheel" ]
 
 [project]
 name = "httpflex"
-version = "1.0.0"
-description = "一个功能强大、易于使用的 HTTP 客户端库，支持同步、异步、缓存、请求重试等功能"
+version = "0.1.0"
+description = "一个功能强大、易于使用的 HTTP 客户端库，支持同步、异步、缓存、请求重试等功能（内部测试版）"
 readme = "README.md"
 keywords = [ "client", "http", "requests" ]
 license = { text = "MIT" }
