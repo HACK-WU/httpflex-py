@@ -27,21 +27,21 @@ classifiers = [
 ]
 
 dependencies = [
-  "celery>=5.6.2",
-  "redis>=7.1",
-  "requests>=2.32.4",
+    "celery>=5.4.0",
+    "redis>=4.6.0",
+    "requests>=2.32.4",
 ]
 
 optional-dependencies.celery = [
-  "celery>=5.6.2",
+  "celery>=5.4.0",
 ]
 
 optional-dependencies.drf = [
-  "djangorestframework>=3.16.1",
+  "djangorestframework>=3.15.1",
 ]
 
 optional-dependencies.redis = [
-  "redis>=7.1",
+  "redis>=4.6.0",
 ]
 
 urls.Documentation = "https://github.com/HACK-WU/httpflex#readme"
@@ -51,16 +51,15 @@ urls.Repository = "https://github.com/HACK-WU/httpflex"
 
 [dependency-groups]
 dev = [
-  "djangorestframework>=3.16.1",
-  "fakeredis>=2.33",
-  "pre-commit>=4.2",
-  "pytest>=8.4.1",
-  "pytest-cov>=7",
-  "pytest-mock>=3.15.1",
-  "pytest-xdist>=3.8",
-  "requests-mock>=1.12.1",
-  "responses>=0.25.8",
-  "ruff>=0.12",
+    "djangorestframework>=3.15.1",
+    "fakeredis>=2.33",
+    "pre-commit>=4.1.0",
+    "pytest>=8.4.1",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.14.0",
+    "requests-mock>=1.12.1",
+    "responses>=0.25.8",
+    "ruff>=0.11.6",
 ]
 
 [tool.setuptools.packages.find]
