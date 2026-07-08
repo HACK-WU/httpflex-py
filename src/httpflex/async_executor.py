@@ -43,6 +43,9 @@ def execute_request_task(
     client_cls = getattr(client_module, class_name)
 
     with client_cls(**(client_kwargs or {})) as client:  # type: ignore[call-arg]
+        # 显式设置 request_mapping，使缓存键生成逻辑在 Celery worker 侧正常工作
+        if getattr(client, "enable_cache", False):
+            client.request_mapping[request_id] = request_config
         return client._make_request_and_format(request_id, request_config)  # type: ignore[attr-defined]
 
 

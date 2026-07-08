@@ -9,7 +9,7 @@ httpflex HTTP 客户端模块
     - 解析器: JSONResponseParser, ContentResponseParser 等
     - 格式化器: DefaultResponseFormatter
     - 执行器: ThreadPoolAsyncExecutor
-    - 缓存: CacheClientMixin, InMemoryCacheBackend, RedisCacheBackend
+    - 缓存: CacheClient, InMemoryCacheBackend, RedisCacheBackend
 
 使用示例:
     >>> from httpflex import BaseClient, JSONResponseParser
@@ -54,6 +54,7 @@ from httpflex.formatter import (
 # 异步执行器
 from httpflex.async_executor import (
     BaseAsyncExecutor,
+    CeleryAsyncExecutor,
     ThreadPoolAsyncExecutor,
 )
 
@@ -66,6 +67,7 @@ from httpflex.validator import (
 # 缓存支持
 from httpflex.cache import (
     BaseCacheBackend,
+    CacheClient,
     InMemoryCacheBackend,
     RedisCacheBackend,
 )
@@ -105,6 +107,7 @@ __all__ = [
     "APIClientNetworkError",
     "APIClientTimeoutError",
     "APIClientValidationError",
+    "APIClientRequestValidationError",
     "APIClientResponseValidationError",
     # 解析器
     "BaseResponseParser",
@@ -118,12 +121,14 @@ __all__ = [
     "DefaultResponseFormatter",
     # 执行器
     "BaseAsyncExecutor",
+    "CeleryAsyncExecutor",
     "ThreadPoolAsyncExecutor",
     # 验证器
     "BaseResponseValidator",
     "StatusCodeValidator",
     # 缓存
     "BaseCacheBackend",
+    "CacheClient",
     "InMemoryCacheBackend",
     "RedisCacheBackend",
     # 工具函数

@@ -13,18 +13,19 @@
 
 import copy
 import logging
-import uuid
-import time
+import re
 import threading
-from typing import Any, TypeAlias
+import time
+import uuid
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 import requests
-import re
-
 from requests.adapters import HTTPAdapter
 from requests.auth import AuthBase
 from urllib3.util.retry import Retry
-from rest_framework import serializers
+
+if TYPE_CHECKING:
+    from rest_framework import serializers
 
 
 # 类型别名定义
@@ -166,7 +167,7 @@ class BaseClient:
         max_workers: 异步执行时的最大工作线程数
         retry_config: 重试策略配置字典
         pool_config: 连接池配置字典
-        verify: SSL 证书验证开关（默认 False，不验证证书）
+        verify: SSL 证书验证开关（默认 True，生产环境推荐验证证书）
         authentication_class: 认证类或实例
         async_executor_class: 异步执行器类或实例
         response_parser_class: 响应数据解析器类或实例
@@ -375,14 +376,14 @@ class BaseClient:
         # 继承CacheClientMixin后，会自动启用缓存
         self.enable_cache = False
         self.user_identifier = None
-        self.cache_key_prefix: str | callable = ""
+        # 尊重子类类属性 cache_key_prefix，未定义时才设默认值
+        self.cache_key_prefix: str | callable = getattr(type(self), "cache_key_prefix", "")
         # request_id -> request_data
         self.request_mapping = {}
 
         # ========== 步骤7: 初始化线程安全相关的锁 ==========
         # 为关键共享状态添加线程锁，支持多线程并发使用
         self._request_mapping_lock = threading.RLock()
-        self._session_lock = threading.RLock()
 
         # ========== 步骤8: 初始化流式响应追踪 ==========
         # 用于追踪未关闭的流式响应，防止资源泄漏
@@ -725,7 +726,7 @@ class BaseClient:
 
         执行步骤:
             1. 调用 before_request 钩子
-            2. 从配置中提取 HTTP 方法和端点路径
+            2. 使用类级别默认的 HTTP 方法和端点路径构建请求
             3. 构建完整的请求 URL
             4. 根据解析器配置决定是否使用流式响应
             5. 合并默认参数和请求特定参数
@@ -763,7 +764,7 @@ class BaseClient:
             if self.enable_sanitization:
                 from httpflex.utils import sanitize_dict, sanitize_headers
 
-                safe_kwargs = sanitize_dict(request_config.copy(), self.sensitive_params)
+                safe_kwargs = sanitize_dict(request_config.copy(), self.sensitive_params | self.sensitive_headers)
                 if self.session.headers:
                     safe_kwargs["headers"] = sanitize_headers(self.session.headers, self.sensitive_headers)
                 logger.debug(f"[{request_id}] Request kwargs: {safe_kwargs}")
@@ -771,8 +772,7 @@ class BaseClient:
                 logger.debug(f"[{request_id}] Request kwargs: {request_config}")
 
         try:
-            with self._session_lock:
-                response = self.session.request(**request_config)
+            response = self.session.request(**request_config)
 
             # 调用 after_request 钩子
             response = self.after_request(request_id, response)
@@ -942,10 +942,13 @@ class BaseClient:
                 }
             )
             # 如果启用了缓存，则添加缓存键
-            if self.enable_cache and self.request_mapping.get(request_id) is not None:
-                cache_key = self._get_cache_key(self.request_mapping[request_id])
-                if cache_key is not None:
-                    formated_response["cache_key"] = cache_key
+            if self.enable_cache:
+                with self._request_mapping_lock:
+                    mapped_request_data = self.request_mapping.get(request_id)
+                if mapped_request_data is not None:
+                    cache_key = self._get_cache_key(mapped_request_data)
+                    if cache_key is not None:
+                        formated_response["cache_key"] = cache_key
 
             return formated_response
         except Exception as format_error:
@@ -1019,7 +1022,7 @@ class BaseClient:
         elif isinstance(response_or_exception, APIClientError):
             # ========== 处理API客户端异常 ==========
             formated_response["result"] = False
-            if hasattr(response_or_exception, "status_code") and response_or_exception.status_code:
+            if getattr(response_or_exception, "status_code", None) is not None:
                 # HTTP错误：使用响应的状态码
                 formated_response["code"] = response_or_exception.status_code
             else:
@@ -1062,12 +1065,17 @@ class BaseClient:
             (解析后的数据, 解析错误)
         """
         try:
-            # 步骤1: 解析响应数据
+            # 步骤1: 验证原始响应（状态码等，parsed_data=None 时执行）
+            if self.response_validator_instance:
+                logger.debug(f"[{request_id}] Validating raw response")
+                self.response_validator_instance.validate(self, response, None)
+
+            # 步骤2: 解析响应数据
             logger.debug(f"[{request_id}] Parsing response data")
             parsed_data = self.response_parser_instance.parse(self, response)
             logger.debug(f"[{request_id}] Response data parsed successfully")
 
-            # 步骤2: 执行解析后数据的验证
+            # 步骤3: 验证解析后的数据（StatusCodeValidator 在 parsed_data 非 None 时跳过）
             if self.response_validator_instance:
                 logger.debug(f"[{request_id}] Validating parsed response data")
                 self.response_validator_instance.validate(self, response, parsed_data)
@@ -1298,7 +1306,7 @@ class DRFClient(BaseClient):
         })
     """
 
-    request_serializer_instance: type[serializers.Serializer] | None = None
+    request_serializer_instance: "type[serializers.Serializer] | None" = None
 
     def _resolve_request_serializer(self, request_serializer):
         """
@@ -1313,6 +1321,7 @@ class DRFClient(BaseClient):
         异常:
             APIClientValidationError: 当传入的不是 DRF Serializer 类时抛出
         """
+        from rest_framework import serializers  # 延迟导入，DRF 为可选依赖
 
         source = request_serializer
         if source is None:

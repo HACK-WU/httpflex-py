@@ -527,15 +527,13 @@ class TestBaseClientThreadSafety:
         assert type(client._request_mapping_lock).__name__ == "RLock"
 
     @pytest.mark.unit
-    def test_has_session_lock(self):
-        """测试存在session锁"""
+    def test_no_session_lock(self):
+        """测试 session 请求不使用全局锁（urllib3 连接池本身线程安全）"""
         # Arrange
         client = MyTestClient()
 
-        # Assert
-        assert hasattr(client, "_session_lock")
-        # RLock是一个函数返回的对象，不是类型，所以检查类型名称
-        assert type(client._session_lock).__name__ == "RLock"
+        # Assert: _session_lock 已移除，避免串行化所有请求
+        assert not hasattr(client, "_session_lock")
 
     @pytest.mark.unit
     def test_has_stream_responses_lock(self):

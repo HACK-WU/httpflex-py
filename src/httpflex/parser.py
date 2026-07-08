@@ -130,7 +130,15 @@ class FileWriteResponseParser(BaseResponseParser):
         if self.suffix:
             filename += self.suffix
 
-        file_path = os.path.join(self.base_path, filename)
+        # 安全处理：仅保留文件名部分，防止路径穿越攻击
+        safe_filename = os.path.basename(filename)
+        file_path = os.path.join(self.base_path, safe_filename)
+
+        # 二次校验：确保最终路径仍在 base_path 目录内
+        base_abs = os.path.abspath(self.base_path)
+        file_abs = os.path.abspath(file_path)
+        if not (file_abs == base_abs or file_abs.startswith(base_abs + os.sep)):
+            raise ValueError(f"Filename '{filename}' resolves outside of base_path")
         logger.debug(f"Writing response content to file: {file_path}")
 
         with open(file_path, "wb") as f:

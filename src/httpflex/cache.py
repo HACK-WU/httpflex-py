@@ -7,15 +7,16 @@
 from __future__ import annotations
 
 import abc
+import base64
 import functools
 import hashlib
 import json
 import logging
+import re
 import threading
 import time
 from collections import OrderedDict
 from typing import Any
-import base64
 
 import redis
 
@@ -195,6 +196,11 @@ class RedisCacheBackend(BaseCacheBackend):
             return f"{self.key_prefix}:{key}"
         return key
 
+    @staticmethod
+    def _escape_glob_pattern(pattern: str) -> str:
+        """转义 Redis glob 模式中的元字符（* ? [ ] \\），使其作为字面量匹配"""
+        return re.sub(r"([*\[\]?\\])", r"\\\1", pattern)
+
     def get(self, key: str) -> Any | None:
         """获取缓存值，自动应用 key_prefix"""
         full_key = self._make_key(key)
@@ -270,7 +276,8 @@ class RedisCacheBackend(BaseCacheBackend):
         try:
             if self.key_prefix:
                 # 使用 SCAN 迭代删除匹配前缀的键，避免阻塞
-                pattern = f"{self.key_prefix}:*"
+                escaped_prefix = self._escape_glob_pattern(self.key_prefix)
+                pattern = f"{escaped_prefix}:*"
                 cursor = 0
                 deleted_count = 0
                 while True:
@@ -293,7 +300,8 @@ class RedisCacheBackend(BaseCacheBackend):
         try:
             if self.key_prefix:
                 # 使用 SCAN 统计匹配的键数量
-                pattern = f"{self.key_prefix}:*"
+                escaped_prefix = self._escape_glob_pattern(self.key_prefix)
+                pattern = f"{escaped_prefix}:*"
                 count = 0
                 cursor = 0
                 while True:
@@ -366,6 +374,10 @@ class CacheClient(BaseClient):
     default_cache_expire: int | None = DEFAULT_CACHE_EXPIRE
     cacheable_methods = CACHEABLE_METHODS
     is_user_specific: bool = False
+    # 缓存后端初始化参数，子类可覆盖以自定义 Redis 连接等配置
+    cache_backend_kwargs: dict[str, Any] = {}
+    # 缓存键前缀，支持字符串或可调用对象，子类可覆盖
+    cache_key_prefix: str = ""
 
     def __init__(
         self,
@@ -483,8 +495,8 @@ class CacheClient(BaseClient):
             cache_key = generate_cache_key(
                 url=self.url,
                 method=method,
-                request_data=cache_relevant_headers,
-                headers=request_data,
+                request_data=request_data,
+                headers=cache_relevant_headers,
                 user_identifier=self._user_identifier,
             )
             if self.cache_key_prefix:
@@ -515,6 +527,10 @@ class CacheClient(BaseClient):
         # 缓存未命中，执行请求
         logger.debug(f"Cache MISS for {request_data.get('endpoint')}")
         result = self._original_request(request_data, is_async)
+
+        # 清理内部字段 cache_key，避免泄露给调用方或写入缓存
+        if isinstance(result, dict):
+            result.pop("cache_key", None)
 
         if self._should_cache_response(result):
             try:
