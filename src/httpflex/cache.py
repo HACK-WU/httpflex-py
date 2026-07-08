@@ -422,7 +422,7 @@ class CacheClient(BaseClient):
 
     def _init_cache_backend(self) -> BaseCacheBackend:
         """初始化缓存后端"""
-        backend_kwargs = getattr(self, "cache_backend_kwargs", {})
+        backend_kwargs = dict(getattr(self, "cache_backend_kwargs", {}))
         try:
             return self.cache_backend_class(**backend_kwargs)
         except Exception as e:
@@ -618,7 +618,7 @@ class CacheClient(BaseClient):
 
                 if cache_key and self._should_cache_response(result):
                     try:
-                        self.cache_backend.set(cache_key, result, expire=self._cache_expire)
+                        self.cache_backend.set(str(cache_key), result, expire=self._cache_expire)
                     except Exception as e:
                         logger.exception(f"Failed to cache response,{e}")
 
@@ -684,5 +684,8 @@ class CacheClient(BaseClient):
             else:
                 self.cache_backend.clear()
                 logger.info("Cache cleared")
+        except RuntimeError:
+            # RedisCacheBackend.clear() 无 key_prefix 时拒绝 flushdb()，需向上传播
+            raise
         except Exception as e:
             logger.exception(f"Cache clear failed: {e}")

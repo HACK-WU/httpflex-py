@@ -227,12 +227,13 @@ class BaseClient:
     # 可在子类或实例化时覆盖，支持精细化控制重试行为
     # 配置项: total(重试次数), backoff_factor(退避因子), status_forcelist(重试状态码),
     #         allowed_methods(允许重试的方法), raise_on_status(是否抛出状态异常)
-    retry_config: dict[str, Any] = DEFAULT_RETRY_CONFIG
+    # 浅拷贝解耦模块常量，避免子类 in-place 修改污染 DEFAULT_RETRY_CONFIG
+    retry_config: dict[str, Any] = {**DEFAULT_RETRY_CONFIG}
 
     # 连接池配置字典，控制 HTTP 连接池的大小和行为
     # 配置项: pool_connections(连接池大小), pool_maxsize(连接池最大连接数)
     # 合理配置可提升并发性能和连接复用效率
-    pool_config: dict[str, Any] = DEFAULT_POOL_CONFIG
+    pool_config: dict[str, Any] = {**DEFAULT_POOL_CONFIG}
 
     # ========== 请求头和并发配置 ==========
     # 默认请求头字典，所有请求都会携带这些请求头（可在请求时合并或覆盖）
@@ -934,6 +935,7 @@ class BaseClient:
             # 兜底：捕获非 APIClientError 的意外异常（如编程错误），统一格式化
             logger.exception(f"[{request_id}] Unexpected error during request: {e}")
             response_or_exception = APIClientNetworkError(f"Unexpected error: {e}")
+            self.on_request_error(request_id, response_or_exception)
         finally:
             # 步骤4: 清理临时属性，避免状态污染
             self._clear_parser_context()
