@@ -16,7 +16,7 @@ import re
 import threading
 import time
 from collections import OrderedDict
-from typing import Any
+from typing import Any, Callable
 
 import redis
 
@@ -92,7 +92,7 @@ class InMemoryCacheBackend(BaseCacheBackend):
 
     def set(self, key: str, value: Any, expire: int | None = None) -> None:
         with self.lock:
-            expire_at = time.time() + expire if expire else None
+            expire_at = time.time() + expire if expire is not None else None
             self.cache[key] = (value, expire_at)
             self.cache.move_to_end(key)
 
@@ -384,7 +384,7 @@ class CacheClient(BaseClient):
         *args,
         cache_expire: int | None = None,
         user_identifier: str | None = None,
-        should_cache_response_func: callable | None = None,
+        should_cache_response_func: Callable[[Any], bool] | None = None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)

@@ -17,7 +17,8 @@ import re
 import threading
 import time
 import uuid
-from typing import TYPE_CHECKING, Any, TypeAlias
+import weakref
+from typing import TYPE_CHECKING, Any, Callable, TypeAlias
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -272,7 +273,7 @@ class BaseClient:
 
     def __init__(
         self,
-        url: str = None,
+        url: str | None = None,
         headers: dict[str, str] | None = None,
         timeout: int | None = None,
         verify: bool | None = None,
@@ -293,7 +294,7 @@ class BaseClient:
         初始化 API 客户端实例
 
         参数:
-            default_headers: 默认请求头字典
+            headers: 默认请求头字典
             timeout: 请求超时时间（秒）
             max_retries: 最大重试次数
             retries: (废弃) 使用 max_retries 替代
@@ -377,7 +378,7 @@ class BaseClient:
         self.enable_cache = False
         self.user_identifier = None
         # 尊重子类类属性 cache_key_prefix，未定义时才设默认值
-        self.cache_key_prefix: str | callable = getattr(type(self), "cache_key_prefix", "")
+        self.cache_key_prefix: str | Callable = getattr(type(self), "cache_key_prefix", "")
         # request_id -> request_data
         self.request_mapping = {}
 
@@ -386,8 +387,8 @@ class BaseClient:
         self._request_mapping_lock = threading.RLock()
 
         # ========== 步骤8: 初始化流式响应追踪 ==========
-        # 用于追踪未关闭的流式响应，防止资源泄漏
-        self._stream_responses = []
+        # 使用 WeakSet 追踪流式响应：当 response 被用户丢弃后自动从集合移除，防止内存泄漏
+        self._stream_responses: weakref.WeakSet = weakref.WeakSet()
         self._stream_responses_lock = threading.RLock()
 
         # ========== 步骤9: 初始化请求钩子 ==========
@@ -409,7 +410,7 @@ class BaseClient:
 
     # ========== 钩子机制 ==========
 
-    def register_hook(self, hook_name: str, callback: callable) -> None:
+    def register_hook(self, hook_name: str, callback: Callable) -> None:
         """
         注册钩子函数
 
@@ -648,8 +649,7 @@ class BaseClient:
         使用序列化器验证请求参数
 
         参数:
-            request_id: 请求唯一标识符
-            request_data: 请求配置字典
+            request_data: 请求配置字典或字典列表
 
         返回:
             验证并可能转换后的请求配置
@@ -927,12 +927,12 @@ class BaseClient:
             # 步骤4: 清理临时属性，避免状态污染
             self._clear_parser_context()
 
-        formated_response = self.default_format_response(response_or_exception, parsed_data, parse_error)
+        formatted_response = self.default_format_response(response_or_exception, parsed_data, parse_error)
 
         try:
-            formated_response = self.response_formatter_instance.format(
+            formatted_response = self.response_formatter_instance.format(
                 **{
-                    "formated_response": formated_response,
+                    "formatted_response": formatted_response,
                     "parsed_data": parsed_data,
                     "request_id": request_id,
                     "request_data": request_data,
@@ -948,9 +948,9 @@ class BaseClient:
                 if mapped_request_data is not None:
                     cache_key = self._get_cache_key(mapped_request_data)
                     if cache_key is not None:
-                        formated_response["cache_key"] = cache_key
+                        formatted_response["cache_key"] = cache_key
 
-            return formated_response
+            return formatted_response
         except Exception as format_error:
             logger.error(f"[{request_id}] Response formatting failed: {format_error}")
             # 格式化失败时的降级处理
@@ -1000,46 +1000,46 @@ class BaseClient:
         5. 处理异常类型：兜底处理未预期的响应类型
         """
         # 初始化标准响应结构，默认为失败状态
-        formated_response: dict[str, Any] = {"result": False, "code": None, "message": "", "data": None}
+        formatted_response: dict[str, Any] = {"result": False, "code": None, "message": "", "data": None}
 
         if isinstance(response_or_exception, requests.Response):
             # ========== 处理成功的HTTP响应 ==========
             # 检查是否有解析错误
             if parse_error:
                 # 虽然HTTP请求成功，但数据解析失败，标记为失败
-                formated_response["result"] = False
-                formated_response["code"] = response_or_exception.status_code
-                formated_response["message"] = f"Parsing failed: {parse_error}"
-                formated_response["data"] = None
+                formatted_response["result"] = False
+                formatted_response["code"] = response_or_exception.status_code
+                formatted_response["message"] = f"Parsing failed: {parse_error}"
+                formatted_response["data"] = None
             else:
                 # HTTP请求成功且数据解析成功（或无需解析）
-                formated_response["result"] = True
-                formated_response["code"] = response_or_exception.status_code
-                formated_response["message"] = "Success"
+                formatted_response["result"] = True
+                formatted_response["code"] = response_or_exception.status_code
+                formatted_response["message"] = "Success"
                 # 使用已解析的数据（可能为None，表示无需解析或解析器未配置）
-                formated_response["data"] = parsed_data
+                formatted_response["data"] = parsed_data
 
         elif isinstance(response_or_exception, APIClientError):
             # ========== 处理API客户端异常 ==========
-            formated_response["result"] = False
+            formatted_response["result"] = False
             if getattr(response_or_exception, "status_code", None) is not None:
                 # HTTP错误：使用响应的状态码
-                formated_response["code"] = response_or_exception.status_code
+                formatted_response["code"] = response_or_exception.status_code
             else:
                 # 非HTTP错误（如网络超时、连接失败等），使用通用错误代码
-                formated_response["code"] = RESPONSE_CODE_NON_HTTP_ERROR
-            formated_response["message"] = str(response_or_exception)
-            formated_response["data"] = None
+                formatted_response["code"] = RESPONSE_CODE_NON_HTTP_ERROR
+            formatted_response["message"] = str(response_or_exception)
+            formatted_response["data"] = None
 
         else:
             # ========== 处理未预期的响应类型（兜底逻辑） ==========
-            formated_response["result"] = False
+            formatted_response["result"] = False
             # 使用特殊错误代码标识未知类型错误
-            formated_response["code"] = RESPONSE_CODE_UNEXPECTED_TYPE
-            formated_response["message"] = f"Unexpected response/exception type: {type(response_or_exception)}"
-            formated_response["data"] = None
+            formatted_response["code"] = RESPONSE_CODE_UNEXPECTED_TYPE
+            formatted_response["message"] = f"Unexpected response/exception type: {type(response_or_exception)}"
+            formatted_response["data"] = None
 
-        return formated_response
+        return formatted_response
 
     def _set_parser_context(self, request_data: RequestData):
         """为 FileWriteResponseParser 设置上下文"""
@@ -1064,6 +1064,11 @@ class BaseClient:
         返回:
             (解析后的数据, 解析错误)
         """
+        # 先注册流式响应，确保即使后续解析/验证失败也能在 close() 时被清理
+        if getattr(self.response_parser_instance, "is_stream", False):
+            with self._stream_responses_lock:
+                self._stream_responses.add(response)
+
         try:
             # 步骤1: 验证原始响应（状态码等，parsed_data=None 时执行）
             if self.response_validator_instance:
@@ -1245,11 +1250,24 @@ class BaseClient:
         """
         关闭 Session 会话，释放连接池资源
 
+        注意: 应在所有请求完成后调用。如果在异步批量请求进行中调用 close()，
+        可能导致部分流式响应未注册就被清理。
+
         执行步骤:
-            1. 检查 session 是否存在
-            2. 调用 session.close() 关闭连接
+            1. 关闭所有未关闭的流式响应，释放底层连接
+            2. 调用 session.close() 关闭连接池
             3. 记录日志
         """
+        # 关闭所有未关闭的流式响应，防止连接泄漏
+        # 先转为 list 快照，避免遍历 WeakSet 时元素被 GC 回收导致 RuntimeError
+        with self._stream_responses_lock:
+            for response in list(self._stream_responses):
+                try:
+                    response.close()
+                except Exception:
+                    logger.debug("Failed to close stream response", exc_info=True)
+            self._stream_responses.clear()
+
         if self.session:
             self.session.close()
             logger.info("Session closed")

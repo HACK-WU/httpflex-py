@@ -51,6 +51,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- ⚠️ BREAKING: `BaseResponseFormatter.format()` 方法参数名 `formated_response` 更正为 `formatted_response`，自定义格式化器子类需更新参数名
+- 流式响应追踪改用 `weakref.WeakSet`，response 被 GC 回收后自动从追踪集合移除，防止长期运行实例内存泄漏
+- `InMemoryCacheBackend.set()` 修正 `expire=0` 语义：原行为为永不过期，现修正为立即过期
+- 补充 `APIClientRequestValidationError` 到 `httpflex` 包的导入和 `__all__`
+- 修正多处类型注解：`callable` → `Callable`，`url: str = None` → `str | None = None`
+- 修正 `_validate_request` 和 `__init__` docstring 中的参数描述错误
+- `constants.py` 中 `RETRY_ALLOWED_METHODS` 的 `POST` 添加非幂等风险注释
+
+### Fixed
+- 实现 `BaseClient` 流式响应追踪逻辑：`_parse_response` 注册流式 response，`close()` 统一关闭，防止连接泄漏
+- 修复 `__init__.py` 中 `APIClientRequestValidationError` 在 `__all__` 声明但未导入导致 `ImportError` 的问题
+- 修复 `InMemoryCacheBackend.set()` 中 `if expire` 对 `expire=0` 判断错误的问题
+- 修正 `formatter.py` 中参数名拼写错误 `formated_response` → `formatted_response`
+
 ### Planned
 - [ ] WebSocket 支持
 - [ ] GraphQL 查询支持

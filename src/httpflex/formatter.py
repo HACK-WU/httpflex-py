@@ -20,7 +20,7 @@ class BaseResponseFormatter(ABC):
     @abstractmethod
     def format(
         self,
-        formated_response: dict,
+        formatted_response: dict,
         parsed_data: Any = None,
         **kwargs,
     ) -> dict[str, Any]:
@@ -41,7 +41,7 @@ class DefaultResponseFormatter(BaseResponseFormatter):
 
     def format(
         self,
-        formated_response: dict,
+        formatted_response: dict,
         parsed_data: Any = None,
         **kwargs,
     ) -> dict[str, Any]:
@@ -55,4 +55,4 @@ class DefaultResponseFormatter(BaseResponseFormatter):
         返回:
             格式化后的字典结构
         """
-        return formated_response
+        return formatted_response

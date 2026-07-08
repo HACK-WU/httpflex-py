@@ -27,6 +27,9 @@ DEFAULT_CACHE_MAXSIZE = 128  # 默认内存缓存最大条目数
 # 重试策略配置
 RETRY_STATUS_FORCELIST = [429, 500, 502, 503, 504]  # 需要重试的 HTTP 状态码
 RETRY_BACKOFF_FACTOR = 0.5  # 重试退避因子
+# 注意: POST 非幂等，自动重试可能导致重复提交。
+# 若调用方确认 POST 操作可安全重试（如基于唯一请求 ID 的幂等接口），可保留；
+# 否则应在子类中覆盖 retry_config 移除 POST。
 RETRY_ALLOWED_METHODS = [
     HTTP_METHOD_HEAD,
     HTTP_METHOD_GET,

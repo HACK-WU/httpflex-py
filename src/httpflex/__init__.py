@@ -30,6 +30,7 @@ from httpflex.exceptions import (
     APIClientError,
     APIClientHTTPError,
     APIClientNetworkError,
+    APIClientRequestValidationError,
     APIClientResponseValidationError,
     APIClientTimeoutError,
     APIClientValidationError,
