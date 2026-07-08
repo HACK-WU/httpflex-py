@@ -363,7 +363,8 @@ class BaseClient:
         # ========== 步骤4: 合并请求头配置 ==========
         # 合并顺序：类级别默认请求头 -> 实例级别请求头 -> kwargs 中的请求头
         # 后者会覆盖前者，实现灵活的请求头配置
-        self.session_headers = {**self.default_headers, **(headers or {})}
+        # 使用 dict() 拷贝避免直接共享可变类属性 default_headers 导致子类间污染
+        self.session_headers = {**dict(self.default_headers), **(headers or {})}
 
         # ========== 步骤5: 配置默认请求参数 =========
         # 保存所有额外的请求参数（如 proxies、cert 等），用于每次请求时合并
@@ -521,7 +522,13 @@ class BaseClient:
             except Exception as e:
                 logger.error(f"Failed to instantiate {source.__name__}: {e}")
                 if fallback_class and fallback_class != source:
-                    return fallback_class(**init_kwargs) if init_kwargs else fallback_class()
+                    try:
+                        return fallback_class(**init_kwargs) if init_kwargs else fallback_class()
+                    except Exception as fallback_err:
+                        logger.error(f"Fallback {fallback_class.__name__} also failed: {fallback_err}")
+                        raise APIClientValidationError(
+                            f"{class_attr_name} instantiation failed: {e}; fallback also failed: {fallback_err}"
+                        )
                 raise APIClientValidationError(f"{class_attr_name} instantiation failed: {e}")
 
         # 处理实例：直接返回
@@ -839,7 +846,7 @@ class BaseClient:
             return endpoint, request_data
 
         # 匹配 {variable_name} 格式的占位符
-        pattern = re.compile(r"\{(\w+)\}")
+        pattern = re.compile(r"\{(\w+)}")
         matches = pattern.findall(endpoint)
 
         if not matches:
@@ -923,6 +930,10 @@ class BaseClient:
             parsed_data, parse_error = self._parse_response(request_id, response)
         except APIClientError as e:
             response_or_exception = e
+        except Exception as e:
+            # 兜底：捕获非 APIClientError 的意外异常（如编程错误），统一格式化
+            logger.exception(f"[{request_id}] Unexpected error during request: {e}")
+            response_or_exception = APIClientNetworkError(f"Unexpected error: {e}")
         finally:
             # 步骤4: 清理临时属性，避免状态污染
             self._clear_parser_context()
@@ -965,7 +976,7 @@ class BaseClient:
         """生成全局唯一的请求 ID"""
         timestamp = int(time.time() * 1000)  # 毫秒级时间戳
         short_uuid = uuid.uuid4().hex[:8]
-        request_id=f"REQ-{timestamp}-{short_uuid}"
+        request_id = f"REQ-{timestamp}-{short_uuid}"
 
         if suffix is not None:
             return f"{request_id}-{suffix}"
@@ -1019,15 +1030,18 @@ class BaseClient:
                 # 使用已解析的数据（可能为None，表示无需解析或解析器未配置）
                 formatted_response["data"] = parsed_data
 
-        elif isinstance(response_or_exception, APIClientError):
-            # ========== 处理API客户端异常 ==========
+        elif isinstance(response_or_exception, APIClientHTTPError):
+            # ========== 处理 HTTP 错误响应异常 ==========
             formatted_response["result"] = False
-            if getattr(response_or_exception, "status_code", None) is not None:
-                # HTTP错误：使用响应的状态码
-                formatted_response["code"] = response_or_exception.status_code
-            else:
-                # 非HTTP错误（如网络超时、连接失败等），使用通用错误代码
-                formatted_response["code"] = RESPONSE_CODE_NON_HTTP_ERROR
+            # status_code 可能为 None（当 response 为 None 时），回退到通用错误码
+            formatted_response["code"] = response_or_exception.status_code or RESPONSE_CODE_NON_HTTP_ERROR
+            formatted_response["message"] = str(response_or_exception)
+            formatted_response["data"] = None
+
+        elif isinstance(response_or_exception, APIClientError):
+            # ========== 处理非 HTTP 错误的客户端异常（超时、网络错误等） ==========
+            formatted_response["result"] = False
+            formatted_response["code"] = RESPONSE_CODE_NON_HTTP_ERROR
             formatted_response["message"] = str(response_or_exception)
             formatted_response["data"] = None
 
@@ -1150,6 +1164,11 @@ class BaseClient:
                 "email": "john@example.com"
             })
         """
+        # 快照本次调用前已存在的 request_id，用于精确清理本次新增的条目
+        # 避免全量清空影响并发场景下其他 request() 调用写入的映射
+        with self._request_mapping_lock:
+            existing_ids = set(self.request_mapping.keys())
+
         try:
             # 处理单个请求：request_data 为 None 或字典时，执行单个请求
             if request_data is None or isinstance(request_data, dict):
@@ -1162,9 +1181,11 @@ class BaseClient:
             # request_data 类型无效，抛出验证异常
             raise APIClientValidationError("request_data must be a dictionary or a list of dictionaries")
         finally:
-            # 请求完成后清空请求映射缓存，使用线程锁确保线程安全
+            # 仅清理本次调用新增的 request_id 映射，保留其他并发调用写入的条目
             with self._request_mapping_lock:
-                self.request_mapping = {}
+                current_ids = set(self.request_mapping.keys())
+                for rid in current_ids - existing_ids:
+                    self.request_mapping.pop(rid, None)
 
     def _execute_single_request(self, request_data: RequestData) -> ResponseDict:
         """
@@ -1369,7 +1390,6 @@ class DRFClient(BaseClient):
         使用 DRF 序列化器验证请求参数
 
         参数:
-            request_id: 请求唯一标识符
             request_data: 请求配置字典或字典列表
 
         返回:

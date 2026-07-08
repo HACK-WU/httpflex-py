@@ -289,9 +289,12 @@ class RedisCacheBackend(BaseCacheBackend):
                         break
                 logger.debug(f"RedisCache cleared {deleted_count} keys with prefix '{self.key_prefix}'")
             else:
-                # 无前缀时清空整个数据库（谨慎使用）
-                self.client.flushdb()
-                logger.warning("RedisCache cleared entire DB (no key_prefix set)")
+                # 无 key_prefix 时拒绝 flushdb()，防止误清共享 Redis 中的其他数据
+                raise RuntimeError(
+                    "Refusing to flushdb() without key_prefix. Set key_prefix on "
+                    "RedisCacheBackend or call client.flushdb() manually if you "
+                    "truly intend to wipe the entire Redis database."
+                )
         except redis.RedisError:
             logger.exception("Redis error clearing cache")
 
@@ -387,6 +390,10 @@ class CacheClient(BaseClient):
         should_cache_response_func: Callable[[Any], bool] | None = None,
         **kwargs,
     ):
+        # 先校验，避免在 super().__init__ 分配 session 等资源后才发现参数错误导致泄漏
+        if self.is_user_specific is True and user_identifier is None:
+            raise ValueError("User identifier is required for user-specific caching")
+
         super().__init__(*args, **kwargs)
 
         # 缓存配置
@@ -400,12 +407,18 @@ class CacheClient(BaseClient):
         # 初始化缓存后端
         self.cache_backend = self._init_cache_backend()
 
-        if self.is_user_specific is True and user_identifier is None:
-            raise ValueError("User identifier is required for user-specific caching")
-
         self._original_request = None
         # 包装请求方法
         self._wrap_request_methods()
+
+    def close(self):
+        """关闭 HTTP session 和缓存后端，释放所有资源"""
+        try:
+            super().close()
+        finally:
+            if self.cache_backend and hasattr(self.cache_backend, "close"):
+                self.cache_backend.close()
+                logger.debug("Cache backend closed")
 
     def _init_cache_backend(self) -> BaseCacheBackend:
         """初始化缓存后端"""
@@ -461,9 +474,8 @@ class CacheClient(BaseClient):
         # 使用默认逻辑
         return self.default_cache_response_check(result)
 
-    def default_cache_response_check(self, result: Any, *args, **kwargs) -> bool:
+    def default_cache_response_check(self, result: Any) -> bool:
         """默认的响应缓存判断逻辑（子类可重写）"""
-
         # 默认缓存所有响应
         return True
 
@@ -594,7 +606,7 @@ class CacheClient(BaseClient):
             executed_results = self._original_request(miss_requests_data, is_async)
 
             # 步骤3: 缓存结果并填充到对应索引位置
-            for (original_index, _), result in zip(miss_cache_requests, executed_results):
+            for (original_index, _), result in zip(miss_cache_requests, executed_results, strict=True):
                 if not isinstance(result, dict):
                     cache_key = None
                 else:
