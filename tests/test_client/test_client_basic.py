@@ -545,3 +545,39 @@ class TestBaseClientThreadSafety:
         assert hasattr(client, "_stream_responses_lock")
         # RLock是一个函数返回的对象，不是类型，所以检查类型名称
         assert type(client._stream_responses_lock).__name__ == "RLock"
+
+
+class TestHookExceptionHandling:
+    """测试钩子异常处理"""
+
+    @pytest.mark.unit
+    def test_before_request_hook_exception_is_caught(self):
+        """验证 before_request 钩子异常被捕获，不影响请求"""
+        import requests
+        client = MyTestClient()
+
+        def bad_hook(client_instance, request_id, request_data):
+            raise RuntimeError("hook failed")
+
+        client.register_hook("before_request", bad_hook)
+
+        # Act - 钩子异常被捕获，返回原始 request_data
+        result = client.before_request("req_1", {"key": "value"})
+        assert result == {"key": "value"}
+
+    @pytest.mark.unit
+    def test_after_request_hook_exception_is_caught(self):
+        """验证 after_request 钩子异常被捕获，不影响响应"""
+        import requests
+        client = MyTestClient()
+        mock_response = Mock(spec=requests.Response)
+        mock_response.status_code = 200
+
+        def bad_hook(client_instance, request_id, response):
+            raise RuntimeError("hook failed")
+
+        client.register_hook("after_request", bad_hook)
+
+        # Act - 钩子异常被捕获，返回原始 response
+        result = client.after_request("req_1", mock_response)
+        assert result.status_code == 200

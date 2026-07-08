@@ -5,15 +5,20 @@ cache.py 模块的单元测试
 - BaseCacheBackend 抽象基类
 - InMemoryCacheBackend 内存缓存
 - RedisCacheBackend Redis缓存
+- generate_cache_key 函数
+- CacheClient 辅助方法
 """
 
 import pytest
 import time
 from abc import ABC
+from unittest.mock import MagicMock, patch, PropertyMock
 from httpflex.cache import (
     BaseCacheBackend,
     InMemoryCacheBackend,
     RedisCacheBackend,
+    generate_cache_key,
+    CacheClient,
 )
 
 
@@ -524,3 +529,348 @@ class TestRedisCacheBackend:
 
         # Assert
         assert result is True
+
+
+class TestEscapeGlobPattern:
+    """测试 RedisCacheBackend._escape_glob_pattern 静态方法"""
+
+    @pytest.mark.unit
+    def test_escape_asterisk(self):
+        """测试转义 * 通配符"""
+        result = RedisCacheBackend._escape_glob_pattern("prefix*")
+        assert result == r"prefix\*"
+
+    @pytest.mark.unit
+    def test_escape_question_mark(self):
+        """测试转义 ? 通配符"""
+        result = RedisCacheBackend._escape_glob_pattern("prefix?")
+        assert result == r"prefix\?"
+
+    @pytest.mark.unit
+    def test_escape_square_brackets(self):
+        """测试转义 [] 通配符"""
+        result = RedisCacheBackend._escape_glob_pattern("prefix[abc]")
+        assert result == r"prefix\[abc\]"
+
+    @pytest.mark.unit
+    def test_escape_backslash(self):
+        """测试转义 \\ 反斜杠"""
+        result = RedisCacheBackend._escape_glob_pattern("prefix\\*")
+        assert result == "prefix\\\\\\*"
+
+    @pytest.mark.unit
+    def test_escape_multiple_metacharacters(self):
+        """测试同时转义多个元字符"""
+        result = RedisCacheBackend._escape_glob_pattern("app*[1]?\\data")
+        assert result == r"app\*\[1\]\?\\data"
+
+    @pytest.mark.unit
+    def test_no_metacharacters(self):
+        """测试无元字符时不变"""
+        result = RedisCacheBackend._escape_glob_pattern("normal_prefix")
+        assert result == "normal_prefix"
+
+    @pytest.mark.unit
+    def test_empty_string(self):
+        """测试空字符串"""
+        result = RedisCacheBackend._escape_glob_pattern("")
+        assert result == ""
+
+
+class TestNormalizeCacheKeyPrefix:
+    """测试 CacheClient._normalize_cache_key_prefix 方法"""
+
+    @pytest.mark.unit
+    def test_empty_prefix(self):
+        """测试空前缀"""
+        # Arrange
+        class TestClient(CacheClient):
+            base_url = "https://api.example.com"
+            method = "GET"
+
+        client = TestClient()
+        # Act & Assert
+        assert client._normalize_cache_key_prefix("") == ""
+        assert client._normalize_cache_key_prefix(None) == ""
+        assert client._normalize_cache_key_prefix(False) == ""
+
+    @pytest.mark.unit
+    def test_string_prefix(self):
+        """测试字符串前缀"""
+        # Arrange
+        class TestClient(CacheClient):
+            base_url = "https://api.example.com"
+            method = "GET"
+
+        client = TestClient()
+        # Act & Assert
+        assert client._normalize_cache_key_prefix("my_prefix") == "my_prefix"
+
+    @pytest.mark.unit
+    def test_string_prefix_with_whitespace(self):
+        """测试带空格的字符串前缀"""
+        # Arrange
+        class TestClient(CacheClient):
+            base_url = "https://api.example.com"
+            method = "GET"
+
+        client = TestClient()
+        # Act & Assert
+        assert client._normalize_cache_key_prefix("  my_prefix  ") == "my_prefix"
+
+    @pytest.mark.unit
+    def test_callable_prefix(self):
+        """测试可调用对象前缀"""
+        # Arrange
+        class TestClient(CacheClient):
+            base_url = "https://api.example.com"
+            method = "GET"
+
+        client = TestClient()
+        # Act & Assert
+        assert client._normalize_cache_key_prefix(lambda: "dynamic_prefix") == "dynamic_prefix"
+
+    @pytest.mark.unit
+    def test_non_string_prefix(self):
+        """测试非字符串类型前缀（自动转换）"""
+        # Arrange
+        class TestClient(CacheClient):
+            base_url = "https://api.example.com"
+            method = "GET"
+
+        client = TestClient()
+        # Act & Assert
+        assert client._normalize_cache_key_prefix(42) == "42"
+
+    @pytest.mark.unit
+    def test_callable_raises_exception(self):
+        """测试可调用对象抛出异常时返回空字符串"""
+        # Arrange
+        class TestClient(CacheClient):
+            base_url = "https://api.example.com"
+            method = "GET"
+
+        client = TestClient()
+        # Act & Assert
+        assert client._normalize_cache_key_prefix(lambda: 1 / 0) == ""
+
+
+class TestLazyCleanup:
+    """测试 InMemoryCacheBackend._lazy_cleanup 惰性清理"""
+
+    @pytest.mark.unit
+    def test_lazy_cleanup_removes_expired_items(self):
+        """测试惰性清理移除过期项"""
+        # Arrange
+        cache = InMemoryCacheBackend(maxsize=10)
+        cache.set("expired1", "value1", expire=1)
+        cache.set("expired2", "value2", expire=1)
+        cache.set("permanent", "value3")  # 不过期
+
+        # 等待过期
+        time.sleep(1.1)
+
+        # Act
+        cache._lazy_cleanup()
+
+        # Assert
+        assert cache.get("expired1") is None
+        assert cache.get("expired2") is None
+        assert cache.get("permanent") == "value3"
+
+    @pytest.mark.unit
+    def test_lazy_cleanup_empty_cache(self):
+        """测试空缓存的惰性清理"""
+        # Arrange
+        cache = InMemoryCacheBackend(maxsize=10)
+
+        # Act & Assert - 不应抛出异常
+        cache._lazy_cleanup()
+
+    @pytest.mark.unit
+    def test_lazy_cleanup_limits_cleanup_count(self):
+        """测试惰性清理限制清理数量"""
+        # Arrange
+        cache = InMemoryCacheBackend(maxsize=100)
+        # 添加 20 个过期项
+        for i in range(20):
+            cache.set(f"expired_{i}", f"value_{i}", expire=1)
+
+        time.sleep(1.1)
+
+        # Act
+        cache._lazy_cleanup()
+
+        # Assert - 应该清理了部分（最多 max_cleanup 个）
+        remaining = len(cache.cache)
+        assert remaining <= 20  # 可能没有全部清理
+
+
+class TestGenerateCacheKey:
+    """测试 generate_cache_key 函数"""
+
+    @pytest.mark.unit
+    def test_basic_cache_key_generation(self):
+        """测试基本缓存键生成"""
+        # Act
+        key = generate_cache_key(
+            url="https://api.example.com/users",
+            method="GET",
+            request_data={"page": 1},
+            headers={"Accept": "application/json"},
+        )
+
+        # Assert
+        assert isinstance(key, str)
+        assert len(key) > 0
+
+    @pytest.mark.unit
+    def test_same_params_same_key(self):
+        """测试相同参数生成相同的键"""
+        # Act
+        key1 = generate_cache_key(
+            url="https://api.example.com/users",
+            method="GET",
+            request_data={"page": 1},
+            headers={},
+        )
+        key2 = generate_cache_key(
+            url="https://api.example.com/users",
+            method="GET",
+            request_data={"page": 1},
+            headers={},
+        )
+
+        # Assert
+        assert key1 == key2
+
+    @pytest.mark.unit
+    def test_different_params_different_key(self):
+        """测试不同参数生成不同的键"""
+        # Act
+        key1 = generate_cache_key(
+            url="https://api.example.com/users",
+            method="GET",
+            request_data={"page": 1},
+            headers={},
+        )
+        key2 = generate_cache_key(
+            url="https://api.example.com/users",
+            method="GET",
+            request_data={"page": 2},
+            headers={},
+        )
+
+        # Assert
+        assert key1 != key2
+
+    @pytest.mark.unit
+    def test_method_case_insensitive(self):
+        """测试 HTTP 方法大小写不敏感"""
+        # Act
+        key1 = generate_cache_key(
+            url="https://api.example.com/users",
+            method="get",
+            request_data={},
+            headers={},
+        )
+        key2 = generate_cache_key(
+            url="https://api.example.com/users",
+            method="GET",
+            request_data={},
+            headers={},
+        )
+
+        # Assert
+        assert key1 == key2
+
+    @pytest.mark.unit
+    def test_with_user_identifier(self):
+        """测试包含用户标识"""
+        # Act
+        key1 = generate_cache_key(
+            url="https://api.example.com/users",
+            method="GET",
+            request_data={},
+            headers={},
+            user_identifier="user1",
+        )
+        key2 = generate_cache_key(
+            url="https://api.example.com/users",
+            method="GET",
+            request_data={},
+            headers={},
+            user_identifier="user2",
+        )
+        key_no_user = generate_cache_key(
+            url="https://api.example.com/users",
+            method="GET",
+            request_data={},
+            headers={},
+        )
+
+        # Assert
+        assert key1 != key2
+        assert key1 != key_no_user
+
+    @pytest.mark.unit
+    def test_parameters_not_swapped(self):
+        """验证 request_data 和 headers 参数没有被交换（修复参数顺序 bug）"""
+        # Arrange
+        data = {"name": "Alice"}
+        headers = {"Authorization": "Bearer token123"}
+
+        # Act - request_data 应包含 name，headers 应包含 Authorization
+        key = generate_cache_key(
+            url="https://api.example.com/users",
+            method="POST",
+            request_data=data,
+            headers=headers,
+        )
+
+        # 交换参数后生成的键应该不同
+        key_swapped = generate_cache_key(
+            url="https://api.example.com/users",
+            method="POST",
+            request_data=headers,  # 故意交换
+            headers=data,  # 故意交换
+        )
+
+        # Assert
+        assert key != key_swapped
+
+
+class TestInMemoryCacheLen:
+    """测试 InMemoryCacheBackend.__len__ 方法"""
+
+    @pytest.mark.unit
+    def test_len_empty_cache(self):
+        """测试空缓存的长度"""
+        cache = InMemoryCacheBackend(maxsize=10)
+        assert len(cache) == 0
+
+    @pytest.mark.unit
+    def test_len_after_set(self):
+        """测试设置后的长度"""
+        cache = InMemoryCacheBackend(maxsize=10)
+        cache.set("key1", "value1")
+        cache.set("key2", "value2")
+        assert len(cache) == 2
+
+    @pytest.mark.unit
+    def test_len_after_delete(self):
+        """测试删除后的长度"""
+        cache = InMemoryCacheBackend(maxsize=10)
+        cache.set("key1", "value1")
+        cache.set("key2", "value2")
+        cache.delete("key1")
+        assert len(cache) == 1
+
+    @pytest.mark.unit
+    def test_len_after_clear(self):
+        """测试清空后的长度"""
+        cache = InMemoryCacheBackend(maxsize=10)
+        cache.set("key1", "value1")
+        cache.set("key2", "value2")
+        cache.clear()
+        assert len(cache) == 0

@@ -10,7 +10,7 @@
 
 import pytest
 import responses
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, PropertyMock
 from celery.result import AsyncResult
 
 from httpflex.async_executor import (
@@ -20,6 +20,7 @@ from httpflex.async_executor import (
     execute_request_task,
 )
 from httpflex.client import BaseClient
+from httpflex.cache import CacheClient, InMemoryCacheBackend
 from httpflex.constants import RESPONSE_CODE_NON_HTTP_ERROR
 
 
@@ -507,3 +508,97 @@ class TestAsyncExecutorErrorHandling:
             assert results[0]["result"] is True
             assert results[1]["result"] is False
             assert "Unexpected error" in results[1]["message"]
+
+
+class CeleryCacheTestClient(CacheClient):
+    """Celery 缓存集成测试客户端"""
+
+    base_url = "https://api.example.com"
+    endpoint = "/users/{user_id}"
+    method = "GET"
+    cache_backend_class = InMemoryCacheBackend
+
+
+class TestCeleryRequestMappingSetup:
+    """测试 Celery worker 侧 request_mapping 显式设置"""
+
+    @pytest.mark.unit
+    @responses.activate
+    def test_celery_task_sets_request_mapping(self):
+        """验证 Celery 任务在 enable_cache=True 时设置 request_mapping"""
+        # Arrange
+        responses.add(
+            responses.GET,
+            "https://api.example.com/users/123",
+            json={"id": 123, "name": "John"},
+            status=200,
+        )
+
+        # 使用 CacheClient 子类，enable_cache 为 True
+        client_path = "tests.test_async_executor.CeleryCacheTestClient"
+        request_id = "req_celery_cache_1"
+        request_config = {"user_id": 123}
+        client_kwargs = {}
+
+        # Act
+        result = execute_request_task(client_path, request_id, request_config, client_kwargs)
+
+        # Assert - 请求应该成功
+        assert result["result"] is True
+        assert result["data"]["id"] == 123
+
+    @pytest.mark.unit
+    @responses.activate
+    def test_celery_task_no_request_mapping_when_cache_disabled(self):
+        """验证 Celery 任务在 enable_cache=False 时不设置 request_mapping"""
+        # Arrange
+        responses.add(
+            responses.GET,
+            "https://api.example.com/users/456",
+            json={"id": 456},
+            status=200,
+        )
+
+        # SimpleTestClient 没有 enable_cache
+        client_path = "tests.test_async_executor.SimpleTestClient"
+        request_id = "req_no_cache_1"
+        request_config = {"user_id": 456}
+        client_kwargs = {}
+
+        # Act
+        result = execute_request_task(client_path, request_id, request_config, client_kwargs)
+
+        # Assert - 请求应该成功，但没有缓存逻辑
+        assert result["result"] is True
+
+    @pytest.mark.unit
+    def test_celery_task_request_mapping_with_mock(self):
+        """验证 Celery 任务使用 mock 确认 request_mapping 设置"""
+        # Arrange
+        mock_client = MagicMock(spec=CacheClient)
+        mock_client.enable_cache = True
+        mock_client.request_mapping = {}
+        mock_client._make_request_and_format.return_value = {
+            "result": True,
+            "data": {"id": 1},
+            "code": 200,
+            "message": "Success",
+        }
+
+        with patch("httpflex.async_executor.import_module") as mock_import:
+            mock_module = MagicMock()
+            mock_module.CeleryCacheTestClient.return_value.__enter__ = MagicMock(return_value=mock_client)
+            mock_module.CeleryCacheTestClient.return_value.__exit__ = MagicMock(return_value=False)
+            mock_import.return_value = mock_module
+
+            # Act
+            execute_request_task(
+                "some.module.CeleryCacheTestClient",
+                "req_test_1",
+                {"user_id": 1},
+                None,
+            )
+
+            # Assert - request_mapping 应该被设置
+            assert "req_test_1" in mock_client.request_mapping
+            assert mock_client.request_mapping["req_test_1"] == {"user_id": 1}

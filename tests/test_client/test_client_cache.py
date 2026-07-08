@@ -537,3 +537,153 @@ class TestCacheClientConcurrent:
         assert len(results) == 20
         assert all(r["result"] is True for r in results)
         assert len(responses.calls) == 20
+
+
+class TestCacheKeyPrefixFromSubclass:
+    """测试 cache_key_prefix 从子类类属性读取"""
+
+    @pytest.mark.unit
+    def test_cache_key_prefix_from_class_attribute(self):
+        """验证 CacheClient 使用子类类属性的 cache_key_prefix"""
+
+        class PrefixClient(CacheClient):
+            base_url = "https://api.example.com"
+            endpoint = "/users"
+            method = "GET"
+            cache_backend_class = InMemoryCacheBackend
+            cache_key_prefix = "custom_prefix"
+
+        client = PrefixClient()
+
+        # Assert - 实例的 cache_key_prefix 应该来自类属性
+        assert client.cache_key_prefix == "custom_prefix"
+
+    @pytest.mark.unit
+    def test_cache_key_prefix_from_subclass_callable(self):
+        """验证 CacheClient 支持可调用对象的 cache_key_prefix"""
+
+        class CallablePrefixClient(CacheClient):
+            base_url = "https://api.example.com"
+            endpoint = "/users"
+            method = "GET"
+            cache_backend_class = InMemoryCacheBackend
+            cache_key_prefix = lambda: "dynamic_prefix"
+
+        client = CallablePrefixClient()
+
+        # Assert - 可调用对象应该被执行后返回结果
+        assert client.cache_key_prefix == "dynamic_prefix"
+
+    @pytest.mark.unit
+    @responses.activate
+    def test_cache_key_uses_prefix(self):
+        """验证缓存键包含前缀"""
+        responses.add(responses.GET, "https://api.example.com/users", json={"users": []}, status=200)
+
+        class PrefixClient(CacheClient):
+            base_url = "https://api.example.com"
+            endpoint = "/users"
+            method = "GET"
+            cache_backend_class = InMemoryCacheBackend
+            cache_key_prefix = "myprefix"
+
+        client = PrefixClient()
+
+        # Act
+        result = client.request()
+
+        # Assert
+        assert result["result"] is True
+        # 缓存键应该包含前缀
+        cache_key = client._get_cache_key({})
+        assert cache_key is not None
+        assert cache_key.startswith("myprefix_")
+
+
+class TestCacheKeyNotInResult:
+    """测试单个请求结果不包含 cache_key 内部字段"""
+
+    @pytest.mark.unit
+    @responses.activate
+    def test_single_request_result_no_cache_key(self):
+        """验证单个请求结果不包含 cache_key 字段"""
+        responses.add(responses.GET, "https://api.example.com/users", json={"users": []}, status=200)
+        client = SimpleCacheAPIClient()
+
+        # Act
+        result = client.request()
+
+        # Assert - cache_key 是内部字段，不应该泄露给调用方
+        assert "cache_key" not in result
+
+    @pytest.mark.unit
+    @responses.activate
+    def test_cached_request_result_no_cache_key(self):
+        """验证缓存命中后的结果也不包含 cache_key 字段"""
+        responses.add(responses.GET, "https://api.example.com/users", json={"users": []}, status=200)
+        client = SimpleCacheAPIClient()
+
+        # Act - 第一次请求（缓存未命中），第二次请求（缓存命中）
+        result1 = client.request()
+        result2 = client.request()
+
+        # Assert
+        assert "cache_key" not in result1
+        assert "cache_key" not in result2
+
+    @pytest.mark.unit
+    @responses.activate
+    def test_batch_request_results_no_cache_key(self):
+        """验证批量请求结果不包含 cache_key 字段"""
+        responses.add(responses.GET, "https://api.example.com/users", json={"id": 1}, status=200)
+        responses.add(responses.GET, "https://api.example.com/users", json={"id": 2}, status=200)
+        client = SimpleCacheAPIClient()
+
+        # Act
+        results = client.request([{"id": 1}, {"id": 2}])
+
+        # Assert
+        for result in results:
+            assert "cache_key" not in result
+
+
+class TestCacheClientShouldCacheFuncError:
+    """测试自定义缓存检查函数异常处理"""
+
+    @pytest.mark.unit
+    @responses.activate
+    def test_should_cache_func_exception_falls_back(self):
+        """验证 _should_cache_response_func 异常时回退到默认逻辑"""
+        responses.add(responses.GET, "https://api.example.com/users", json={"users": []}, status=200)
+
+        def bad_cache_check(result):
+            raise RuntimeError("check failed")
+
+        client = SimpleCacheAPIClient(should_cache_response_func=bad_cache_check)
+
+        # Act - 异常被捕获，回退到默认逻辑（缓存所有响应）
+        result1 = client.request()
+        result2 = client.request()
+
+        # Assert - 回退到默认缓存逻辑，第二次请求应命中缓存
+        assert result1["result"] is True
+        assert len(responses.calls) == 1  # 缓存命中
+
+
+class TestCacheClientRequestMappingLock:
+    """测试 request_mapping 锁保护"""
+
+    @pytest.mark.unit
+    @responses.activate
+    def test_request_mapping_lock_exists(self):
+        """验证 request_mapping_lock 存在"""
+        client = SimpleCacheAPIClient()
+        assert hasattr(client, "_request_mapping_lock")
+
+    @pytest.mark.unit
+    @responses.activate
+    def test_request_mapping_lock_is_rlock(self):
+        """验证 request_mapping_lock 是 RLock"""
+        import threading
+        client = SimpleCacheAPIClient()
+        assert type(client._request_mapping_lock).__name__ == "RLock"

@@ -470,3 +470,54 @@ class TestFileWriteResponseParser:
         """UT-PARSER-019: 验证 is_stream 为 True"""
         # Arrange & Act & Assert
         assert parser.is_stream is True
+
+    @pytest.mark.unit
+    def test_parse_strips_path_traversal_from_filename(self, temp_dir, mock_client):
+        """UT-PARSER-020: os.path.basename 剥离路径穿越组件"""
+        # Arrange - 路径穿越通过 _current_filename 属性注入
+        parser = FileWriteResponseParser(base_path=temp_dir)
+        parser._current_filename = "../../../etc/passwd"
+        mock_response = Mock()
+        mock_response.url = "https://api.example.com/file.txt"
+        mock_response.iter_content = Mock(return_value=iter([b"safe content"]))
+
+        # Act - basename 剥离 ../，文件写入 base_path 内
+        file_path = parser.parse(mock_client, mock_response)
+
+        # Assert - 文件应在 base_path 内，文件名应为 "passwd"
+        assert os.path.exists(file_path)
+        assert file_path.startswith(temp_dir)
+        assert file_path.endswith("passwd")
+
+    @pytest.mark.unit
+    def test_parse_strips_subdir_traversal(self, temp_dir, mock_client):
+        """UT-PARSER-021: 剥离带子目录的路径穿越"""
+        # Arrange
+        parser = FileWriteResponseParser(base_path=temp_dir)
+        parser._current_filename = "subdir/../../etc/passwd"
+        mock_response = Mock()
+        mock_response.url = "https://api.example.com/file.txt"
+        mock_response.iter_content = Mock(return_value=iter([b"safe content"]))
+
+        # Act
+        file_path = parser.parse(mock_client, mock_response)
+
+        # Assert - basename 剥离路径组件，安全写入
+        assert os.path.exists(file_path)
+        assert file_path.startswith(temp_dir)
+
+    @pytest.mark.unit
+    def test_parse_allows_valid_filename(self, temp_dir, mock_client):
+        """UT-PARSER-022: 允许正常的文件名（无路径穿越）"""
+        # Arrange
+        parser = FileWriteResponseParser(base_path=temp_dir)
+        mock_response = Mock()
+        mock_response.url = "https://api.example.com/normal_file.txt"
+        mock_response.iter_content = Mock(return_value=iter([b"safe content"]))
+
+        # Act
+        file_path = parser.parse(mock_client, mock_response)
+
+        # Assert
+        assert os.path.exists(file_path)
+        assert file_path.startswith(temp_dir)

@@ -14,7 +14,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from httpflex.client import BaseClient
 from httpflex.cache import CacheClient, InMemoryCacheBackend
 from httpflex.serializer import BaseRequestSerializer
-from httpflex.exceptions import APIClientValidationError
+from httpflex.validator import StatusCodeValidator
+from httpflex.exceptions import APIClientValidationError, APIClientResponseValidationError
 
 
 class SimpleIntegrationClient(CacheClient):
@@ -474,3 +475,75 @@ class TestComplexScenarios:
         # 每个线程执行3次操作，但由于缓存，实际请求次数会少于9次
         # cacheless会绕过缓存，所以至少有3次请求
         assert len(responses.calls) >= 3
+
+
+class TestStatusCodeValidatorIntegration:
+    """测试 StatusCodeValidator 在真实请求流程中的集成"""
+
+    @pytest.mark.unit
+    @responses.activate
+    def test_status_code_validator_rejects_in_real_flow(self):
+        """验证 StatusCodeValidator 在 _parse_response 预解析阶段实际执行"""
+        # Arrange - 返回 200 响应（不会触发 raise_for_status），但 validator 只允许 201
+        responses.add(responses.GET, "https://api.example.com/users", json={"users": []}, status=200)
+
+        class ValidatedClient(BaseClient):
+            base_url = "https://api.example.com"
+            endpoint = "/users"
+            method = "GET"
+
+        # validator 只允许 201，但服务器返回 200
+        client = ValidatedClient(
+            response_validator=StatusCodeValidator(allowed_codes=[201])
+        )
+
+        # Act - StatusCodeValidator 抛出异常后被 _parse_response 捕获
+        result = client.request()
+
+        # Assert - 验证错误被捕获并转为失败响应
+        assert result["result"] is False
+        assert "not in allowed codes" in result["message"]
+
+    @pytest.mark.unit
+    @responses.activate
+    def test_status_code_validator_passes_in_real_flow(self):
+        """验证 StatusCodeValidator 允许通过的请求正常工作"""
+        # Arrange - 返回 200 响应
+        responses.add(responses.GET, "https://api.example.com/users", json={"users": []}, status=200)
+
+        class ValidatedClient(BaseClient):
+            base_url = "https://api.example.com"
+            endpoint = "/users"
+            method = "GET"
+
+        client = ValidatedClient(
+            response_validator=StatusCodeValidator(allowed_codes=[200])
+        )
+
+        # Act
+        result = client.request()
+
+        # Assert
+        assert result["result"] is True
+
+    @pytest.mark.unit
+    @responses.activate
+    def test_status_code_validator_with_multiple_allowed_codes(self):
+        """验证 StatusCodeValidator 支持多个允许的状态码"""
+        # Arrange - 返回 201 响应
+        responses.add(responses.POST, "https://api.example.com/users", json={"id": 1}, status=201)
+
+        class ValidatedClient(BaseClient):
+            base_url = "https://api.example.com"
+            endpoint = "/users"
+            method = "POST"
+
+        client = ValidatedClient(
+            response_validator=StatusCodeValidator(allowed_codes=[200, 201, 204])
+        )
+
+        # Act
+        result = client.request({"json": {"name": "Alice"}})
+
+        # Assert
+        assert result["result"] is True
