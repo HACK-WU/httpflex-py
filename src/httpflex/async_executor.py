@@ -53,6 +53,40 @@ def execute_request_task(
         return client._make_request_and_format(request_id, request_config)  # type: ignore[attr-defined]
 
 
+def register_celery_tasks(celery_app: Any, task_name: str | None = None) -> Any:
+    """将 httpflex 的请求任务注册到指定 Celery app 上（幂等）。
+
+    Celery worker（消费者）在**启动时**会冻结自己的任务策略表，之后只会执行
+    「启动前已注册」的任务；收到未注册的任务名会直接丢弃消息（``Received
+    unregistered task``），导致生产者永久等待结果。
+
+    典型用法——**独立 worker 进程**：worker 与生产者通常不在同一进程，不会共享
+    同一个 app 实例，因此必须在 worker 进程自己的 app 上、且在启动前完成注册::
+
+        # tasks.py（worker 进程加载的模块）
+        from celery import Celery
+        from httpflex.async_executor import register_celery_tasks
+
+        app = Celery("myproj", broker=..., backend=...)
+        register_celery_tasks(app)  # 启动前注册
+        # 之后再 `celery -A tasks worker` 启动
+
+    参数:
+        celery_app: 目标 Celery 实例（worker 与生产者需使用一致的 broker/backend 与任务名）
+        task_name: 任务名，默认 ``CELERY_REQUEST_TASK_NAME``；须与 ``CeleryAsyncExecutor``
+            派发时使用的 ``task_name`` 保持一致，否则路由失败
+
+    返回:
+        已注册的 Celery Task 对象（若已注册则直接返回现有对象，避免重复创建）
+    """
+    name = task_name or CELERY_REQUEST_TASK_NAME
+    # 幂等：已注册则复用，避免重复构建 Task 对象
+    existing = celery_app.tasks.get(name)
+    if existing is not None:
+        return existing
+    return celery_app.task(name=name)(execute_request_task)
+
+
 class BaseAsyncExecutor:
     """
     异步执行器基类

@@ -58,6 +58,7 @@ from httpflex.async_executor import (
     BaseAsyncExecutor,
     CeleryAsyncExecutor,
     ThreadPoolAsyncExecutor,
+    register_celery_tasks,
 )
 
 # 响应验证器
@@ -126,6 +127,7 @@ __all__ = [
     "BaseAsyncExecutor",
     "CeleryAsyncExecutor",
     "ThreadPoolAsyncExecutor",
+    "register_celery_tasks",
     # 验证器
     "BaseResponseValidator",
     "StatusCodeValidator",

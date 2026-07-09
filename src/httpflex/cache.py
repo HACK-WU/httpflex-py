@@ -693,7 +693,8 @@ class CacheClient(BaseClient):
 
     def clear_cache(self, pattern: str | None = None) -> None:
         """清除缓存，支持模式匹配"""
-        if not self.cache_backend:
+        # 用 is not None 判断后端是否已初始化（缓存后端定义了 __len__，空缓存时真值为 False）
+        if self.cache_backend is None:
             return
 
         try:
