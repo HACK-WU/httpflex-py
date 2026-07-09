@@ -15,11 +15,7 @@ from httpflex.client import BaseClient
 from httpflex.cache import CacheClient, InMemoryCacheBackend
 from httpflex.serializer import BaseRequestSerializer
 from httpflex.validator import StatusCodeValidator
-<<<<<<< HEAD
-from httpflex.exceptions import APIClientValidationError, APIClientResponseValidationError
-=======
 from httpflex.exceptions import APIClientValidationError
->>>>>>> 2b2159f (feat: 添加端到端测试)
 
 
 class SimpleIntegrationClient(CacheClient):
@@ -505,13 +501,7 @@ class TestStatusCodeValidatorIntegration:
             method = "GET"
 
         # validator 只允许 201，但服务器返回 200
-<<<<<<< HEAD
-        client = ValidatedClient(
-            response_validator=StatusCodeValidator(allowed_codes=[201])
-        )
-=======
         client = ValidatedClient(response_validator=StatusCodeValidator(allowed_codes=[201]))
->>>>>>> 2b2159f (feat: 添加端到端测试)
 
         # Act - StatusCodeValidator 抛出异常后被 _parse_response 捕获
         result = client.request()
@@ -532,13 +522,7 @@ class TestStatusCodeValidatorIntegration:
             endpoint = "/users"
             method = "GET"
 
-<<<<<<< HEAD
-        client = ValidatedClient(
-            response_validator=StatusCodeValidator(allowed_codes=[200])
-        )
-=======
         client = ValidatedClient(response_validator=StatusCodeValidator(allowed_codes=[200]))
->>>>>>> 2b2159f (feat: 添加端到端测试)
 
         # Act
         result = client.request()
@@ -558,13 +542,7 @@ class TestStatusCodeValidatorIntegration:
             endpoint = "/users"
             method = "POST"
 
-<<<<<<< HEAD
-        client = ValidatedClient(
-            response_validator=StatusCodeValidator(allowed_codes=[200, 201, 204])
-        )
-=======
         client = ValidatedClient(response_validator=StatusCodeValidator(allowed_codes=[200, 201, 204]))
->>>>>>> 2b2159f (feat: 添加端到端测试)
 
         # Act
         result = client.request({"json": {"name": "Alice"}})

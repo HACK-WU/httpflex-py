@@ -228,7 +228,7 @@ class CeleryAsyncExecutor(BaseAsyncExecutor):
     ):
         super().__init__(**kwargs)
         # 延迟导入 celery，避免未使用 Celery 执行器时也强制依赖 celery
-        from celery import current_app, shared_task
+        from celery import current_app
 
         self.celery_app = celery_app or current_app
         self.task_name = task_name or CELERY_REQUEST_TASK_NAME
@@ -238,11 +238,11 @@ class CeleryAsyncExecutor(BaseAsyncExecutor):
         # 注册 Celery 任务（仅在此执行器被实例化时才真正导入并注册 celery 任务）。
         # 注意：必须按 self.task_name（可为自定义名）注册，与 execute() 中
         # send_task(self.task_name, ...) 使用的名称保持一致，否则自定义 task_name 时路由失败。
-        self._task = shared_task(name=self.task_name)(execute_request_task)
-        try:
-            self.celery_app.register_task(self._task)
-        except Exception:
-            logger.warning("Failed to register celery task on the provided app", exc_info=True)
+        # 通过 register_celery_tasks 幂等地绑定到 celery_app（内部用 app.task 直接注册，
+        # 不用 shared_task + register_task —— 后者返回代理，register_task 设置 _app 会触发递归）。
+        # 提示：独立 worker 进程不与本进程共享 app 实例，需在 worker 侧自行调用
+        # register_celery_tasks(app) 完成注册（见该函数文档）。
+        self._task = register_celery_tasks(self.celery_app, self.task_name)
 
     def execute(
         self,

@@ -10,7 +10,7 @@
 
 import pytest
 import responses
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 from celery.result import AsyncResult
 
 from httpflex.async_executor import (
@@ -604,8 +604,6 @@ class TestCeleryRequestMappingSetup:
             # Assert - request_mapping 应该被设置
             assert "req_test_1" in mock_client.request_mapping
             assert mock_client.request_mapping["req_test_1"] == {"user_id": 1}
-<<<<<<< HEAD
-=======
 
 
 class TestRegisterCeleryTasks:
@@ -664,4 +662,3 @@ class TestRegisterCeleryTasks:
         assert executor._task is task
         same_name = [n for n in app.tasks.keys() if n == CELERY_REQUEST_TASK_NAME]
         assert len(same_name) == 1
->>>>>>> 2b2159f (feat: 添加端到端测试)
