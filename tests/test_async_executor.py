@@ -18,6 +18,8 @@ from httpflex.async_executor import (
     ThreadPoolAsyncExecutor,
     CeleryAsyncExecutor,
     execute_request_task,
+    register_celery_tasks,
+    CELERY_REQUEST_TASK_NAME,
 )
 from httpflex.client import BaseClient
 from httpflex.cache import CacheClient, InMemoryCacheBackend
@@ -602,3 +604,64 @@ class TestCeleryRequestMappingSetup:
             # Assert - request_mapping 应该被设置
             assert "req_test_1" in mock_client.request_mapping
             assert mock_client.request_mapping["req_test_1"] == {"user_id": 1}
+<<<<<<< HEAD
+=======
+
+
+class TestRegisterCeleryTasks:
+    """测试 register_celery_tasks 辅助函数（注册、命名、幂等）"""
+
+    @staticmethod
+    def _make_app():
+        """创建一个独立的真实 Celery app，避免污染全局/其他测试。"""
+        from celery import Celery
+        import uuid
+
+        return Celery(f"test_register_{uuid.uuid4().hex}")
+
+    @pytest.mark.unit
+    def test_registers_default_task_name(self):
+        """未传 task_name 时，按默认名 CELERY_REQUEST_TASK_NAME 注册。"""
+        app = self._make_app()
+        task = register_celery_tasks(app)
+        assert task is not None
+        assert task.name == CELERY_REQUEST_TASK_NAME
+        assert CELERY_REQUEST_TASK_NAME in app.tasks
+        # 注册进去的对象应与返回值一致
+        assert app.tasks[CELERY_REQUEST_TASK_NAME] is task
+
+    @pytest.mark.unit
+    def test_registers_custom_task_name(self):
+        """传自定义 task_name 时，使用自定义名注册；自定义名任务与默认名任务相互独立。"""
+        app = self._make_app()
+        custom = "myapp.custom_request"
+        task = register_celery_tasks(app, task_name=custom)
+        assert task.name == custom
+        assert custom in app.tasks
+        assert app.tasks[custom] is task
+        # 自定义名任务不应与默认名任务混用（默认名可能因 Celery 全局注册而存在，应为不同对象）
+        default_task = app.tasks.get(CELERY_REQUEST_TASK_NAME)
+        assert task is not default_task
+
+    @pytest.mark.unit
+    def test_idempotent_returns_same_object(self):
+        """重复注册同一名字应复用同一 Task 对象，不会重复登记。"""
+        app = self._make_app()
+        t1 = register_celery_tasks(app)
+        t2 = register_celery_tasks(app)
+        assert t1 is t2
+        # 任务表内同名任务只能有一条
+        same_name = [n for n in app.tasks.keys() if n == CELERY_REQUEST_TASK_NAME]
+        assert len(same_name) == 1
+
+    @pytest.mark.unit
+    def test_idempotent_across_instances(self):
+        """同一 app 上，executor 与显式调用注册应命中同一对象（避免重复创建）。"""
+        app = self._make_app()
+        task = register_celery_tasks(app)
+        executor = CeleryAsyncExecutor(celery_app=app)
+        # executor 初始化时会再次调用 register_celery_tasks，应复用而非新建
+        assert executor._task is task
+        same_name = [n for n in app.tasks.keys() if n == CELERY_REQUEST_TASK_NAME]
+        assert len(same_name) == 1
+>>>>>>> 2b2159f (feat: 添加端到端测试)

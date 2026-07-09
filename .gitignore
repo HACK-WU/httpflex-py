@@ -64,3 +64,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Environment / secrets（保留 .env.example 作为模板）
+.env
+.env.*
+!.env.example
