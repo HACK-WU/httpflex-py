@@ -27,17 +27,7 @@ classifiers = [
 ]
 
 dependencies = [
-<<<<<<< HEAD
-    "requests>=2.32.4",
-]
-
-optional-dependencies.all = [
-  "celery>=5.4.0",
-  "djangorestframework>=3.15.1",
-  "redis>=4.6.0",
-=======
   "requests>=2.32.4",
->>>>>>> 2b2159f (feat: 添加端到端测试)
 ]
 
 optional-dependencies.all = [
@@ -47,11 +37,7 @@ optional-dependencies.all = [
 ]
 
 optional-dependencies.celery = [
-<<<<<<< HEAD
-  "celery>=5.4.0",
-=======
   "celery>=5.4",
->>>>>>> 2b2159f (feat: 添加端到端测试)
 ]
 
 optional-dependencies.drf = [
@@ -59,11 +45,7 @@ optional-dependencies.drf = [
 ]
 
 optional-dependencies.redis = [
-<<<<<<< HEAD
-  "redis>=4.6.0",
-=======
   "redis>=4.6",
->>>>>>> 2b2159f (feat: 添加端到端测试)
 ]
 
 urls.Documentation = "https://github.com/HACK-WU/httpflex#readme"
@@ -73,17 +55,6 @@ urls.Repository = "https://github.com/HACK-WU/httpflex"
 
 [dependency-groups]
 dev = [
-<<<<<<< HEAD
-    "djangorestframework>=3.15.1",
-    "fakeredis>=2.33",
-    "pre-commit>=4.1.0",
-    "pytest>=8.4.1",
-    "pytest-cov>=6.0.0",
-    "pytest-mock>=3.14.0",
-    "requests-mock>=1.12.1",
-    "responses>=0.25.8",
-    "ruff>=0.11.6",
-=======
   "celery>=5.4",
   "djangorestframework>=3.15.1",
   "fakeredis>=2.33",
@@ -95,7 +66,6 @@ dev = [
   "requests-mock>=1.12.1",
   "responses>=0.25.8",
   "ruff>=0.11.6",
->>>>>>> 2b2159f (feat: 添加端到端测试)
 ]
 
 [tool.setuptools.packages.find]
