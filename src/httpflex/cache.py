@@ -423,7 +423,10 @@ class CacheClient(BaseClient):
         try:
             super().close()
         finally:
-            if self.cache_backend and hasattr(self.cache_backend, "close"):
+            # 注意：缓存后端（RedisCacheBackend/InMemoryCacheBackend）定义了 __len__，
+            # 空缓存时 bool(backend) 为 False。因此必须用 ``is not None`` 判断后端是否已初始化，
+            # 而不能用真值判断，否则空缓存时 close 会跳过后端关闭造成连接泄漏。
+            if self.cache_backend is not None and hasattr(self.cache_backend, "close"):
                 self.cache_backend.close()
                 logger.debug("Cache backend closed")
 
