@@ -17,7 +17,8 @@ import re
 import threading
 import time
 from collections import OrderedDict
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 from httpflex.constants import (
     CACHEABLE_METHODS,
@@ -259,7 +260,7 @@ class RedisCacheBackend(BaseCacheBackend):
                 serialized = str(value)
 
             if expire:
-                self.client.setex(full_key, expire, serialized)
+                self.client.set(full_key, serialized, ex=expire)
             else:
                 self.client.set(full_key, serialized)
 

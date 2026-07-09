@@ -35,7 +35,9 @@ class APIClientHTTPError(APIClientError):
     def __init__(self, message: str, response: requests.Response | None = None):
         super().__init__(message)
         self.response = response
-        self.status_code = response.status_code if response else None
+        # 显式判断 is not None：requests >= 2.34 中 4xx/5xx 的 Response 对象 bool() 为 False，
+        # 用 `if response` 会把错误响应误判为无响应，导致 status_code 丢失
+        self.status_code = response.status_code if response is not None else None
 
 
 class APIClientNetworkError(APIClientError):

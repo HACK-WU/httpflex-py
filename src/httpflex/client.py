@@ -19,7 +19,8 @@ import time
 import uuid
 import warnings
 import weakref
-from typing import TYPE_CHECKING, Any, Callable, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias
+from collections.abc import Callable
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -839,8 +840,10 @@ class BaseClient:
             raise error
         except requests.exceptions.HTTPError as e:
             # 情况2: HTTP 错误响应（4xx/5xx 状态码）
-            status_code = e.response.status_code if e.response else 0
-            reason = e.response.reason if e.response else "No response"
+            # 注意：requests >= 2.34 中 4xx/5xx 的 Response 对象 bool() 为 False，
+            # 不能用 `if e.response` 做真值判断（会把错误响应误判为无响应），必须显式判断 is not None
+            status_code = e.response.status_code if e.response is not None else 0
+            reason = e.response.reason if e.response is not None else "No response"
             error = APIClientHTTPError(f"HTTP {status_code}: {reason}", response=e.response)
             logger.error(f"[{request_id}] Request failed: {error}")
             self.on_request_error(request_id, error)
