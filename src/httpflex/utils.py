@@ -155,9 +155,39 @@ def sanitize_dict(
             result[key] = mask
         elif recursive and isinstance(value, dict):
             result[key] = sanitize_dict(value, sensitive_keys, mask, recursive)
+        elif recursive and isinstance(value, list):
+            # 递归脱敏列表中的元素（支持嵌套 dict / list）
+            result[key] = sanitize_list(value, sensitive_keys, mask)
         else:
             result[key] = value
 
+    return result
+
+
+def sanitize_list(
+    data: list[Any],
+    sensitive_keys: set[str] | None = None,
+    mask: str = "***",
+) -> list[Any]:
+    """
+    脱敏列表中的敏感信息（递归处理嵌套的 dict / list）
+
+    参数:
+        data: 原始列表
+        sensitive_keys: 敏感键名集合，不区分大小写。None 时使用默认集合
+        mask: 脱敏后的替换字符串
+
+    返回:
+        脱敏后的列表（新列表，不修改原列表）
+    """
+    result = []
+    for item in data:
+        if isinstance(item, dict):
+            result.append(sanitize_dict(item, sensitive_keys, mask))
+        elif isinstance(item, list):
+            result.append(sanitize_list(item, sensitive_keys, mask))
+        else:
+            result.append(item)
     return result
 
 

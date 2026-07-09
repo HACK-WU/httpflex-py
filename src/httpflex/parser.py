@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -82,7 +83,7 @@ class StreamResponseParser(BaseResponseParser):
 
     使用示例:
         >>> client = MyClient(response_parser=StreamResponseParser())
-        >>> result = client.request({"endpoint": "/large-file"})
+        >>> result = client.request()
         >>> response = result["data"]
         >>> for chunk in response.iter_content(chunk_size=8192):
         >>>     process_chunk(chunk)
@@ -126,7 +127,12 @@ class FileWriteResponseParser(BaseResponseParser):
             parts = url_path.rstrip("/").split("/")
             if parts:
                 default_filename = parts[-1]
-        filename = getattr(self, "_current_filename", None) or default_filename
+        # 优先使用随请求传递、线程隔离的文件名（避免并发请求共享实例属性导致竞态）；
+        # 仅当 client_instance 为真实 BaseClient（其 _parser_context 是 threading.local）时读取，
+        # 避免对 Mock 等对象误判；保留 self._current_filename 作为独立使用解析器时的兼容回退
+        ctx = getattr(client_instance, "_parser_context", None)
+        filename = getattr(ctx, "filename", None) if isinstance(ctx, threading.local) else None
+        filename = filename or getattr(self, "_current_filename", None) or default_filename
         if self.suffix:
             filename += self.suffix
 

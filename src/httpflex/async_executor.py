@@ -12,25 +12,29 @@ from copy import deepcopy
 from importlib import import_module
 from typing import Any
 
-from celery import Celery, current_app, shared_task
-from celery.exceptions import TimeoutError as CeleryTimeoutError
-from celery.result import AsyncResult, ResultSet
-
 from httpflex.constants import RESPONSE_CODE_NON_HTTP_ERROR
 from httpflex.exceptions import APIClientError
 
 logger = logging.getLogger(__name__)
 
 
+# 延迟导入占位：celery 仅在 CeleryAsyncExecutor 被使用时才真正导入，
+# 此处保留模块级名称以便测试对 httpflex.async_executor.ResultSet 等进行 mock patch
+ResultSet = None
+CeleryTimeoutError = None
+
+
 CELERY_REQUEST_TASK_NAME = "http_client.execute_request_task"
 
 
-@shared_task(name=CELERY_REQUEST_TASK_NAME, bind=True)
 def execute_request_task(
-    self, client_path: str, request_id: str, request_config: dict[str, Any], client_kwargs: dict[str, Any] | None = None
+    client_path: str,
+    request_id: str,
+    request_config: dict[str, Any],
+    client_kwargs: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
-    使用 Celery 执行单个请求
+    使用 Celery 执行单个请求（纯函数，celery 在 CeleryAsyncExecutor 中按需导入并注册）
 
     参数:
         client_path: 客户端类的完整路径（module.ClassName）
@@ -180,7 +184,8 @@ class CeleryAsyncExecutor(BaseAsyncExecutor):
 
     def __init__(
         self,
-        celery_app: Celery | None = None,
+        # celery 为可选依赖，此处用 Any 避免模块级导入；运行时由下方延迟导入校验
+        celery_app: Any = None,
         task_name: str | None = None,
         client_kwargs: dict[str, Any] | None = None,
         wait_timeout: int | None = None,
@@ -188,11 +193,22 @@ class CeleryAsyncExecutor(BaseAsyncExecutor):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        # 延迟导入 celery，避免未使用 Celery 执行器时也强制依赖 celery
+        from celery import current_app, shared_task
+
         self.celery_app = celery_app or current_app
         self.task_name = task_name or CELERY_REQUEST_TASK_NAME
         self.client_kwargs_template = client_kwargs or {}
         self.wait_timeout = wait_timeout
         self.revoke_on_timeout = revoke_on_timeout
+        # 注册 Celery 任务（仅在此执行器被实例化时才真正导入并注册 celery 任务）。
+        # 注意：必须按 self.task_name（可为自定义名）注册，与 execute() 中
+        # send_task(self.task_name, ...) 使用的名称保持一致，否则自定义 task_name 时路由失败。
+        self._task = shared_task(name=self.task_name)(execute_request_task)
+        try:
+            self.celery_app.register_task(self._task)
+        except Exception:
+            logger.warning("Failed to register celery task on the provided app", exc_info=True)
 
     def execute(
         self,
@@ -209,6 +225,18 @@ class CeleryAsyncExecutor(BaseAsyncExecutor):
         返回:
             格式化后的响应字典列表，顺序与输入一致
         """
+        # 延迟导入 celery 异常与结果类型，并写入模块级全局，
+        # 既避免模块导入时强制依赖 celery，又兼容对 httpflex.async_executor.ResultSet 的 mock patch
+        global ResultSet, CeleryTimeoutError
+        if ResultSet is None:
+            from celery.result import ResultSet as _ResultSet
+
+            ResultSet = _ResultSet
+        if CeleryTimeoutError is None:
+            from celery.exceptions import TimeoutError as _CeleryTimeoutError
+
+            CeleryTimeoutError = _CeleryTimeoutError
+
         logger.info(
             f"Starting {len(validated_request_mapping)} asynchronous requests via Celery task '{self.task_name}'"
         )
@@ -217,7 +245,7 @@ class CeleryAsyncExecutor(BaseAsyncExecutor):
         client_kwargs = self._build_client_kwargs(client_instance)
 
         # 维护 request_id 与 async_result 的映射关系
-        request_id_to_async_result: dict[str, AsyncResult] = {}
+        request_id_to_async_result: dict[str, Any] = {}
         request_id_list = list(validated_request_mapping.keys())
 
         # 提交所有请求任务
@@ -247,7 +275,7 @@ class CeleryAsyncExecutor(BaseAsyncExecutor):
         # 按原始顺序返回结果
         return [results_dict[request_id] for request_id in request_id_list]
 
-    def _get_task_result(self, request_id: str, async_result: AsyncResult) -> dict:
+    def _get_task_result(self, request_id: str, async_result: Any) -> dict:
         """获取单个任务的结果"""
         if async_result.successful():
             return async_result.result
@@ -270,7 +298,7 @@ class CeleryAsyncExecutor(BaseAsyncExecutor):
                 "data": None,
             }
 
-    def _revoke_pending_tasks(self, request_id_to_async_result: dict[str, AsyncResult]) -> None:
+    def _revoke_pending_tasks(self, request_id_to_async_result: dict[str, Any]) -> None:
         """撤销未完成的任务"""
         for request_id, async_result in request_id_to_async_result.items():
             if not async_result.ready():

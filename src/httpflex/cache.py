@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import abc
 import base64
+import copy
 import functools
 import hashlib
 import json
@@ -17,8 +18,6 @@ import threading
 import time
 from collections import OrderedDict
 from typing import Any, Callable
-
-import redis
 
 from httpflex.constants import (
     CACHEABLE_METHODS,
@@ -88,11 +87,13 @@ class InMemoryCacheBackend(BaseCacheBackend):
             # 在 get 操作时也触发惰性清理，清理部分过期项
             self._lazy_cleanup()
 
-            return value
+            # 返回深拷贝，避免调用方修改返回的 dict 污染缓存（与 Redis 后端行为一致）
+            return copy.deepcopy(value)
 
     def set(self, key: str, value: Any, expire: int | None = None) -> None:
         with self.lock:
-            expire_at = time.time() + expire if expire is not None else None
+            # expire 为 0 或 None 均表示"无过期"；仅正数才计算过期时间，确保与 Redis 后端语义一致
+            expire_at = time.time() + expire if expire else None
             self.cache[key] = (value, expire_at)
             self.cache.move_to_end(key)
 
@@ -177,6 +178,10 @@ class RedisCacheBackend(BaseCacheBackend):
         key_prefix: str = "cache_backend",
         **kwargs,
     ):
+        # 延迟导入 redis，避免未使用 Redis 缓存后端时也强制依赖 redis
+        import redis
+
+        self._redis = redis
         # 使用连接池提高性能
         self.pool = redis.ConnectionPool(
             host=host,
@@ -228,7 +233,7 @@ class RedisCacheBackend(BaseCacheBackend):
                 return value_str
             logger.debug(f"RedisCache miss for key: {key} (full_key: {full_key})")
             return None
-        except redis.RedisError:
+        except self._redis.RedisError:
             logger.exception(f"Redis error getting key '{key}' (full_key: {full_key})")
             return None
         except Exception:
@@ -259,7 +264,7 @@ class RedisCacheBackend(BaseCacheBackend):
                 self.client.set(full_key, serialized)
 
             logger.debug(f"RedisCache set for key: {key} (full_key: {full_key}), expire: {expire}")
-        except (TypeError, redis.RedisError):
+        except (TypeError, self._redis.RedisError):
             logger.exception(f"Redis error setting key '{key}' (full_key: {full_key})")
 
     def delete(self, key: str) -> None:
@@ -268,7 +273,7 @@ class RedisCacheBackend(BaseCacheBackend):
         try:
             self.client.delete(full_key)
             logger.debug(f"RedisCache deleted key: {key} (full_key: {full_key})")
-        except redis.RedisError:
+        except self._redis.RedisError:
             logger.exception(f"Redis error deleting key '{key}' (full_key: {full_key})")
 
     def clear(self) -> None:
@@ -295,7 +300,7 @@ class RedisCacheBackend(BaseCacheBackend):
                     "RedisCacheBackend or call client.flushdb() manually if you "
                     "truly intend to wipe the entire Redis database."
                 )
-        except redis.RedisError:
+        except self._redis.RedisError:
             logger.exception("Redis error clearing cache")
 
     def __len__(self) -> int:
@@ -314,7 +319,7 @@ class RedisCacheBackend(BaseCacheBackend):
                         break
                 return count
             return self.client.dbsize()
-        except redis.RedisError:
+        except self._redis.RedisError:
             logger.exception("Redis error getting cache size")
             return 0
 
@@ -322,7 +327,7 @@ class RedisCacheBackend(BaseCacheBackend):
         """检查 Redis 连接是否正常"""
         try:
             return self.client.ping()
-        except redis.RedisError:
+        except self._redis.RedisError:
             logger.exception("Redis connection check failed")
             return False
 
@@ -398,7 +403,8 @@ class CacheClient(BaseClient):
 
         # 缓存配置
         self.enable_cache = True
-        self._cache_expire = cache_expire or self.default_cache_expire
+        # 显式区分 None（使用默认过期）与 0（无过期），避免 cache_expire=0 被静默替换为默认值
+        self._cache_expire = self.default_cache_expire if cache_expire is None else cache_expire
         self._user_identifier = user_identifier
         self._should_cache_response_func = should_cache_response_func
 
@@ -475,9 +481,12 @@ class CacheClient(BaseClient):
         return self.default_cache_response_check(result)
 
     def default_cache_response_check(self, result: Any) -> bool:
-        """默认的响应缓存判断逻辑（子类可重写）"""
-        # 默认缓存所有响应
-        return True
+        """默认的响应缓存判断逻辑（子类可重写）
+
+        默认仅缓存成功响应（result 为 True），避免将 5xx/4xx 等故障响应写入缓存而被
+        "固化"，导致故障在过期时间内持续被返回。
+        """
+        return isinstance(result, dict) and result.get("result") is True
 
     def _extract_cache_relevant_headers(self, headers: dict) -> dict:
         """提取影响缓存的关键 headers（子类可重写）"""
@@ -488,7 +497,7 @@ class CacheClient(BaseClient):
         """为请求生成缓存键
 
         参数:
-            request_data: 请求配置字典,包含 method、endpoint、params、data、json、headers 等字段
+            request_data: 请求配置字典（其全部内容会作为查询参数或 JSON 请求体发送，无保留键）
 
         返回:
             缓存键字符串,如果不应该缓存则返回 None
@@ -524,8 +533,17 @@ class CacheClient(BaseClient):
         if not self.enable_cache:
             return self._original_request(request_data, is_async)
 
-        # 获取缓存键
-        cache_key = self._get_cache_key(request_data)
+        # 缓存键基于校验后的数据计算，确保与写入侧（_make_request_and_format 从
+        # request_mapping 读取校验后的数据生成缓存键）保持一致，避免 Celery 批量路径
+        # 因序列化器转换字段而导致读取键与写入键不一致
+        key_data = request_data
+        if isinstance(request_data, dict) and self.request_serializer_instance is not None:
+            try:
+                key_data = self._validate_request(request_data)
+            except Exception:
+                logger.exception("Failed to validate request for cache key, falling back to raw data")
+
+        cache_key = self._get_cache_key(key_data)
         if not cache_key:
             return self._original_request(request_data, is_async)
         try:
@@ -537,7 +555,7 @@ class CacheClient(BaseClient):
             logger.exception(f"Failed to get cache: {e}")
 
         # 缓存未命中，执行请求
-        logger.debug(f"Cache MISS for {request_data.get('endpoint')}")
+        logger.debug(f"Cache MISS for key: {cache_key}")
         result = self._original_request(request_data, is_async)
 
         # 清理内部字段 cache_key，避免泄露给调用方或写入缓存
@@ -580,7 +598,14 @@ class CacheClient(BaseClient):
 
         # 步骤1: 检查缓存状态，记录索引位置
         for index, request_data in enumerate(request_list):
-            cache_key = self._get_cache_key(request_data)
+            # 缓存键基于校验后的数据计算，确保与写入侧（request_mapping 存储校验后数据）一致（M4）
+            key_data = request_data
+            if isinstance(request_data, dict) and self.request_serializer_instance is not None:
+                try:
+                    key_data = self._validate_request(request_data)
+                except Exception:
+                    pass
+            cache_key = self._get_cache_key(key_data)
             if cache_key is None:
                 miss_cache_requests.append((index, request_data))
                 continue

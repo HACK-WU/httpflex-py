@@ -17,6 +17,7 @@ import re
 import threading
 import time
 import uuid
+import warnings
 import weakref
 from typing import TYPE_CHECKING, Any, Callable, TypeAlias
 
@@ -135,6 +136,10 @@ class _RequestMethodDescriptor:
                 4. 返回请求结果
             """
             # 创建临时实例并自动管理生命周期
+            # BaseClient.__init__ 使用 url 参数；为兼容类属性命名 base_url，在此做映射，
+            # 避免用户按类文档传入 base_url 时被当作普通 kwargs 泄漏给 requests.Session.request
+            if "base_url" in client_kwargs:
+                client_kwargs["url"] = client_kwargs.pop("base_url")
             with owner(**client_kwargs) as temp_instance:
                 return temp_instance.request(request_data=request_data, is_async=is_async)
 
@@ -212,6 +217,10 @@ class BaseClient:
 
     # 是否启用敏感信息脱敏，默认启用以提高安全性
     enable_sanitization: bool = True
+
+    # 钩子执行失败时是否中断请求：默认 False（仅记录日志并继续，使用未受影响的 request_data）
+    # 设为 True 时，before_request 钩子抛出的异常会向上传播，中断本次请求
+    raise_on_hook_error: bool = False
 
     # ========== 超时和重试配置 ==========
     # 默认请求超时时间（秒），防止请求无限期挂起
@@ -298,7 +307,7 @@ class BaseClient:
             headers: 默认请求头字典
             timeout: 请求超时时间（秒）
             max_retries: 最大重试次数
-            retries: (废弃) 使用 max_retries 替代
+            retries: (已废弃，将被忽略) 请使用 max_retries 替代；传入此参数仅会触发 DeprecationWarning
             max_workers: 异步执行的最大工作线程数
             retry_config: 重试策略配置字典（覆盖类级别配置）
             pool_config: 连接池配置字典（覆盖类级别配置）
@@ -321,6 +330,17 @@ class BaseClient:
         异常:
             APIClientValidationError: 当 base_url 未设置或配置无效时抛出
         """
+
+        # ========== 步骤0: 处理已废弃的 retries 参数 ==========
+        # retries 已被 max_retries 取代，若误传会被静默忽略并给出弃用告警，
+        # 避免其被 **kwargs 收集后传入 requests.Session.request 导致 TypeError
+        if "retries" in kwargs:
+            warnings.warn(
+                "'retries' is deprecated and ignored; use 'max_retries' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            kwargs.pop("retries")
 
         # ========== 步骤1: 验证并规范化 base_url ==========
         self.base_url = self.base_url.rstrip("/") if self.base_url else ""
@@ -367,6 +387,11 @@ class BaseClient:
         # 使用 dict() 拷贝避免直接共享可变类属性 default_headers 导致子类间污染
         self.session_headers = {**dict(self.default_headers), **(headers or {})}
 
+        # 复制类级别的敏感字段集合为实例属性，避免某个实例原地修改（add/remove）
+        # 污染所有实例共享的类属性
+        self.sensitive_headers = set(self.sensitive_headers)
+        self.sensitive_params = set(self.sensitive_params)
+
         # ========== 步骤5: 配置默认请求参数 =========
         # 保存所有额外的请求参数（如 proxies、cert 等），用于每次请求时合并
         self.default_request_kwargs = kwargs
@@ -387,6 +412,11 @@ class BaseClient:
         # ========== 步骤7: 初始化线程安全相关的锁 ==========
         # 为关键共享状态添加线程锁，支持多线程并发使用
         self._request_mapping_lock = threading.RLock()
+
+        # ========== 步骤7.1: 初始化线程隔离的解析器上下文 ==========
+        # 用于传递 FileWriteResponseParser 等需要的请求级上下文（如文件名），
+        # 通过线程本地存储避免并发请求共享同一 parser 实例时的竞态覆盖
+        self._parser_context = threading.local()
 
         # ========== 步骤8: 初始化流式响应追踪 ==========
         # 使用 WeakSet 追踪流式响应：当 response 被用户丢弃后自动从集合移除，防止内存泄漏
@@ -443,13 +473,20 @@ class BaseClient:
 
         返回:
             修改后的请求配置字典
+
+        钩子失败语义:
+            默认情况下（raise_on_hook_error=False），某个 before_request 钩子抛出的异常
+            仅记录日志，不会阻断请求；后续钩子仍会基于上一个成功的 request_data 执行。
+            若将类属性 raise_on_hook_error 设为 True，则钩子异常会向上传播并中断本次请求。
         """
         # 执行所有注册的 before_request 钩子
         for hook in self._hooks["before_request"]:
             try:
                 request_data = hook(self, request_id, request_data)
             except Exception as e:
-                logger.exception(f"[{request_id}] before_request hook failed,{e}")
+                if self.raise_on_hook_error:
+                    raise
+                logger.exception(f"[{request_id}] before_request hook failed: {e}")
         return request_data
 
     def after_request(self, request_id: str, response: requests.Response) -> requests.Response:
@@ -727,30 +764,34 @@ class BaseClient:
 
         参数:
             request_id: 请求唯一标识符，用于日志追踪
-            request_data: 请求配置字典，包含 method、endpoint、params 等
+            request_data: 请求配置字典。其全部内容都会作为业务参数发送：
+                GET/DELETE/HEAD/OPTIONS 方法下放入 URL 查询字符串，
+                POST/PUT/PATCH 方法下放入 JSON 请求体。
+                注意：request_data 中不存在任何"保留键"（如 endpoint/params/json/headers），
+                所有字段都会被当作业务参数处理；如需自定义单次请求的 headers，
+                请通过客户端构造参数或 default_headers 配置，而非在 request_data 中传入。
 
         返回:
             requests.Response 对象
 
         执行步骤:
-            1. 调用 before_request 钩子
-            2. 使用类级别默认的 HTTP 方法和端点路径构建请求
-            3. 构建完整的请求 URL
-            4. 根据解析器配置决定是否使用流式响应
-            5. 合并默认参数和请求特定参数
-            6. 执行 HTTP 请求
-            7. 调用 after_request 钩子
-            8. 检查响应状态码，抛出 HTTP 错误
-            9. 捕获并转换各类异常为自定义异常
+            1. 使用类级别默认的 HTTP 方法和端点路径构建请求
+            2. 构建完整的请求 URL
+            3. 根据解析器配置决定是否使用流式响应
+            4. 合并默认参数和请求特定参数
+            5. 执行 HTTP 请求
+            6. 调用 after_request 钩子
+            7. 检查响应状态码，抛出 HTTP 错误
+            8. 捕获并转换各类异常为自定义异常
 
         异常:
             APIClientTimeoutError: 请求超时
             APIClientHTTPError: HTTP 错误响应（4xx, 5xx）
             APIClientNetworkError: 网络连接错误
-        """
-        # 步骤0: 调用 before_request 钩子
-        request_data = self.before_request(request_id, request_data)
 
+        注: before_request 钩子已移至 _make_request_and_format 中、外层 try 之前调用，
+        以便 raise_on_hook_error=True 时钩子异常能向上传播、中断请求。
+        """
         method = self._class_default_method
         url = self.url
 
@@ -919,6 +960,17 @@ class BaseClient:
         # 步骤1: 为 FileWriteResponseParser 传递文件名
         self._set_parser_context(request_data)
 
+        # 步骤1.5: 调用 before_request 钩子
+        # 必须在下方 try 之前执行：当 raise_on_hook_error=True 时，钩子异常应
+        # 真正向上传播给 request() 调用方（中断本次请求），而不能被下方兜底
+        # except 吞掉并替换成泛化的 APIClientNetworkError。若此处抛错，先清理
+        # parser 上下文再原样抛出。
+        try:
+            request_data = self.before_request(request_id, request_data)
+        except Exception:
+            self._clear_parser_context()
+            raise
+
         # 步骤2: 执行请求并捕获响应或异常
         parsed_data: Any = None
         parse_error: Exception | None = None
@@ -1058,16 +1110,19 @@ class BaseClient:
         return formatted_response
 
     def _set_parser_context(self, request_data: RequestData):
-        """为 FileWriteResponseParser 设置上下文"""
+        """为 FileWriteResponseParser 设置上下文（线程隔离，避免并发竞态）"""
         parser = self.response_parser_instance
         if isinstance(parser, FileWriteResponseParser) and (filename := request_data.get("filename")):
-            parser._current_filename = filename
+            # 存储在当前线程本地，而非共享的 parser 实例属性，避免并发请求互相覆盖
+            self._parser_context.filename = filename
 
     def _clear_parser_context(self):
-        """清理 FileWriteResponseParser 的上下文"""
+        """清理 FileWriteResponseParser 的上下文（仅清理当前线程本地数据）"""
         parser = self.response_parser_instance
-        if isinstance(parser, FileWriteResponseParser) and hasattr(parser, "_current_filename"):
-            delattr(parser, "_current_filename")
+        if isinstance(parser, FileWriteResponseParser):
+            ctx = self._parser_context
+            if getattr(ctx, "filename", None) is not None:
+                del ctx.filename
 
     def _parse_response(self, request_id: str, response: requests.Response) -> tuple[Any, Exception | None]:
         """
@@ -1205,12 +1260,13 @@ class BaseClient:
             3. 执行 HTTP 请求并格式化结果
         """
         request_id = self.generate_request_id()
-        if self.enable_cache:
-            with self._request_mapping_lock:
-                self.request_mapping[request_id] = copy.deepcopy(request_data)
 
         # 验证请求参数
         validated_config = self._validate_request(request_data)
+        if self.enable_cache:
+            # 缓存键基于校验后的数据生成，确保读取与写入两侧使用同一份数据（M4）
+            with self._request_mapping_lock:
+                self.request_mapping[request_id] = copy.deepcopy(validated_config)
 
         return self._make_request_and_format(request_id, validated_config)
 
@@ -1234,10 +1290,12 @@ class BaseClient:
         validated_request_mapping = {}
         for i, request_data in enumerate(request_list):
             request_id = self.generate_request_id(i)
+            validated_config = self._validate_request(request_data)
             if self.enable_cache:
+                # 缓存键基于校验后的数据生成，确保读取与写入两侧使用同一份数据（M4）
                 with self._request_mapping_lock:
-                    self.request_mapping[request_id] = copy.deepcopy(request_data)
-            validated_request_mapping[request_id] = self._validate_request(request_data)
+                    self.request_mapping[request_id] = copy.deepcopy(validated_config)
+            validated_request_mapping[request_id] = validated_config
 
         return (
             self.async_executor_instance.execute(self, validated_request_mapping)
@@ -1337,13 +1395,11 @@ class DRFClient(BaseClient):
             method = "POST"
             request_serializer_class = CreateUserSerializer
 
-        # 发送请求（会自动验证 json 中的数据）
+        # 发送请求（会自动用序列化器校验字典中的字段）
         result = UserAPIClient.request({
-            "json": {
-                "username": "john_doe",
-                "email": "john@example.com",
-                "age": 25
-            }
+            "username": "john_doe",
+            "email": "john@example.com",
+            "age": 25
         })
     """
 

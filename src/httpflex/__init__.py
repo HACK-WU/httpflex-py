@@ -19,7 +19,8 @@ httpflex HTTP 客户端模块
     ...     response_parser_class = JSONResponseParser
     >>>
     >>> client = MyAPIClient()
-    >>> result = client.request({"endpoint": "/users", "params": {"page": 1}})
+    >>> # 整个 request_data 字典会作为查询参数发送（GET 方法）
+    >>> result = client.request({"page": 1})
 """
 
 # 核心客户端
@@ -78,6 +79,7 @@ from httpflex.utils import (
     mask_string,
     sanitize_dict,
     sanitize_headers,
+    sanitize_list,
     sanitize_url,
 )
 
@@ -136,6 +138,7 @@ __all__ = [
     "sanitize_headers",
     "sanitize_url",
     "sanitize_dict",
+    "sanitize_list",
     "mask_string",
     # 常量
     "DEFAULT_TIMEOUT",
