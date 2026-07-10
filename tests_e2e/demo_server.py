@@ -217,6 +217,15 @@ class DemoRequestHandler(BaseHTTPRequestHandler):
         if path == "/nonce" and method == "GET":
             return self._send_json(200, {"nonce": uuid.uuid4().hex})
 
+        # --- 变延迟回显（用于并发顺序/准确性测试）：?value=V&delay=D ---
+        # 故意让不同请求的完成顺序与提交顺序错开，验证结果顺序仍严格对应输入参数
+        if path == "/echo-delay" and method == "GET":
+            value = query.get("value", "")
+            delay = float(query.get("delay", "0"))
+            if delay > 0:
+                time.sleep(min(delay, 10))
+            return self._send_json(200, {"value": value})
+
         # --- 不稳定端点：前 fail 次返回 500，之后返回 200（验证重试生效） ---
         if path == "/unstable" and method == "GET":
             _UNSTABLE["n"] += 1

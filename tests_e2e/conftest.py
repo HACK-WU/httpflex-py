@@ -71,6 +71,31 @@ requires_redis = pytest.mark.skipif(
 )
 
 
+# ============ 共享的客户端构造助手 ============
+def client_for(base_url: str, endpoint=None, method=None, base_cls=None, **kwargs):
+    """构造一个以 endpoint/method/base_url 为类属性的客户端实例。
+
+    httpflex 的请求 URL 由 ``base_url``（类属性）+ ``endpoint`` 拼装，因此必须用类属性
+    传入动态端口，而不能把 endpoint 当作构造函数参数（否则会泄漏进 requests.Session.request）。
+    ``url=`` 构造函数参数只设置 self.url 用于日志，不影响实际请求 URL。
+
+    endpoint/method 为 None 时沿用 base_cls 自身的类属性；base_cls 默认 BaseClient。
+    cache_backend_class / cache_backend_kwargs 等应通过 base_cls 的类属性传入，而非 kwargs
+    （kwargs 会进入 BaseClient.__init__ 的 **kwargs 而非类属性）。
+    """
+    from httpflex import BaseClient
+
+    if base_cls is None:
+        base_cls = BaseClient
+    attrs = {"base_url": base_url}
+    if endpoint is not None:
+        attrs["endpoint"] = endpoint
+    if method is not None:
+        attrs["method"] = method.upper()
+    cls = type("E2EClient", (base_cls,), attrs)
+    return cls(**kwargs)
+
+
 # ============ 本地 demo 服务器 ============
 from tests_e2e.demo_server import reset_demo_state, run_demo_server  # noqa: E402
 
