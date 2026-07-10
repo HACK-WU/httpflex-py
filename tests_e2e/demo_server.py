@@ -52,6 +52,12 @@ class DemoRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         self._handle()
 
+    def do_HEAD(self) -> None:
+        self._handle()
+
+    def do_OPTIONS(self) -> None:
+        self._handle()
+
     def do_POST(self) -> None:
         self._handle()
 
@@ -233,6 +239,23 @@ class DemoRequestHandler(BaseHTTPRequestHandler):
             if _UNSTABLE["n"] <= fail:
                 return self._send_json(500, {"detail": "temporarily unavailable", "attempt": _UNSTABLE["n"]})
             return self._send_json(200, {"status": "ok", "attempt": _UNSTABLE["n"]})
+
+        # --- HEAD 请求（用于验证 HEAD 方法走查询参数路径）---
+        if path == "/head-test" and method == "HEAD":
+            self.send_response(200)
+            self.send_header("X-Head-Value", query.get("v", ""))
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
+        # --- OPTIONS 请求（用于验证 OPTIONS 方法走查询参数路径）---
+        if path == "/options-test" and method == "OPTIONS":
+            self.send_response(200)
+            self.send_header("Allow", "GET, POST, OPTIONS")
+            self.send_header("X-Echo", query.get("v", ""))
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
 
         # --- 未匹配路由 ---
         return self._send_json(404, {"detail": f"No route for {method} {path}"})
