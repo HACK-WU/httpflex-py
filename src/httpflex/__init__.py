@@ -158,5 +158,5 @@ __all__ = [
     "HTTP_METHOD_TRACE",
 ]
 
-__version__ = "0.1.1"
+__version__ = "0.1.1-beta"
 __author__ = "HACK-WU"
