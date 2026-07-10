@@ -17,14 +17,19 @@
 ## 安装
 
 ```bash
-# 核心依赖（仅需 requests）
-pip install httpflex
+# 当前未发布到 PyPI，推荐从 GitHub Release 直接 pip 安装（URL 后以 #egg 指定可选依赖）
+pip install "https://github.com/HACK-WU/httpflex/releases/download/v0.1.1-beta/httpflex-0.1.1b0.tar.gz#egg=httpflex[all]"        # 推荐：celery + djangorestframework + redis
 
-# 按需安装可选依赖
-pip install "httpflex[all]"        # celery + djangorestframework + redis
-pip install "httpflex[celery]"     # 仅 Celery 执行器
-pip install "httpflex[redis]"      # 仅 Redis 缓存后端
-pip install "httpflex[drf]"        # 仅 DRF 序列化器
+# 仅安装核心（不含可选依赖）
+pip install "https://github.com/HACK-WU/httpflex/releases/download/v0.1.1-beta/httpflex-0.1.1b0.tar.gz#egg=httpflex"
+
+# 按需指定单个可选依赖
+pip install "https://github.com/HACK-WU/httpflex/releases/download/v0.1.1-beta/httpflex-0.1.1b0.tar.gz#egg=httpflex[celery]"    # 仅 Celery 执行器
+pip install "https://github.com/HACK-WU/httpflex/releases/download/v0.1.1-beta/httpflex-0.1.1b0.tar.gz#egg=httpflex[redis]"     # 仅 Redis 缓存后端
+pip install "https://github.com/HACK-WU/httpflex/releases/download/v0.1.1-beta/httpflex-0.1.1b0.tar.gz#egg=httpflex[drf]"       # 仅 DRF 序列化器
+
+# 或从 GitHub 源码安装最新开发版（master）
+pip install "git+https://github.com/HACK-WU/httpflex.git"
 ```
 
 核心运行时依赖：`requests>=2.32.4`。可选依赖：`celery>=5.4`、`djangorestframework>=3.15.1`、`redis>=4.6`。
@@ -126,4 +131,3 @@ MIT License — 详见 [LICENSE](LICENSE)。
 
 - GitHub 仓库：https://github.com/HACK-WU/httpflex
 - 问题反馈：https://github.com/HACK-WU/httpflex/issues
-- 贡献指南：[CONTRIBUTING.md](CONTRIBUTING.md)
